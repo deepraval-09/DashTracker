@@ -1,22 +1,12 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/proxy";
 
 export async function proxy(request: NextRequest) {
-  // Keep the existing Supabase session-refresh behavior.
-  const response = await updateSession(request);
+  let response = NextResponse.next({
+    request,
+  });
 
-  const pathname = request.nextUrl.pathname;
-
-  // Only the dashboard homepage is protected for now.
-  // Login, confirmation callbacks, and other public routes
-  // continue to use the existing session-refresh behavior.
-  if (pathname !== "/") {
-    return response;
-  }
-
-  // Create a request-scoped client to verify the user's JWT.
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
@@ -26,29 +16,46 @@ export async function proxy(request: NextRequest) {
           return request.cookies.getAll();
         },
 
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
+        setAll(cookiesToSet, headers) {
+          cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
+          });
+
+          response = NextResponse.next({
+            request,
+          });
+
+          cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
+          });
+
+          Object.entries(headers).forEach(([key, value]) => {
+            response.headers.set(key, value);
           });
         },
       },
     }
   );
 
-  try {
-    // Verify the signed authentication claims.
-    const { data, error } = await supabase.auth.getClaims();
+  // Refresh the session and verify the JWT once.
+  const { data, error } = await supabase.auth.getClaims();
 
-    if (!error && data?.claims?.sub) {
-      return response;
-    }
-  } catch (error) {
-    console.error("Dashboard authentication failed:", error);
+  // Keep login, signup callbacks, and other public routes accessible.
+  if (request.nextUrl.pathname !== "/") {
+    return response;
   }
 
-  // No valid session: send the visitor to the login page.
-  return NextResponse.redirect(new URL("/login", request.url));
+  // Authenticated visitors can access the dashboard.
+  if (!error && data?.claims?.sub) {
+    return response;
+  }
+
+  // Unauthenticated visitors go to the login page.
+  const loginUrl = request.nextUrl.clone();
+  loginUrl.pathname = "/login";
+  loginUrl.search = "";
+
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
