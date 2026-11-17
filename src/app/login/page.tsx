@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowRight,
@@ -18,7 +17,6 @@ import { createClient } from "@/lib/supabase/client";
 type AuthMode = "login" | "signup";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [supabase] = useState(() => createClient());
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
@@ -65,19 +63,25 @@ export default function LoginPage() {
         if (signupError) throw signupError;
         setPassword("");
         if (data.session) {
-          router.replace("/");
-          router.refresh();
-        } else {
-          setSuccess("Check your email for the confirmation link. After confirming, return here to sign in.");
+          // Use a fresh browser request so the Next.js Proxy reads the
+          // newly issued Supabase auth cookies on the first navigation.
+          window.location.replace("/");
+          return;
         }
+        setSuccess("Check your email for the confirmation link. After confirming, return here to sign in.");
       } else {
-        const { error: loginError } = await supabase.auth.signInWithPassword({
+        const { data, error: loginError } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password,
         });
         if (loginError) throw loginError;
-        router.replace("/");
-        router.refresh();
+        if (!data.session) {
+          throw new Error("Sign-in did not return an active session. Please try again.");
+        }
+        // Avoid competing router.replace() and router.refresh() calls.
+        // Full navigation sends the current cookies with the dashboard request.
+        window.location.replace("/");
+        return;
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Something went wrong. Please try again.");
