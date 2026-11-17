@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 import {
   Activity,
   ArrowDownUp,
@@ -20,6 +23,9 @@ import {
   TrendingUp,
   LayoutDashboard,
   ListTodo,
+  LogOut,
+  ShieldCheck,
+  UserRound,
   Menu,
   MoreHorizontal,
   Pin,
@@ -65,33 +71,7 @@ type Note = {
   updatedAt: string;
 };
 type NoteFields = Pick<Note, "title" | "content">;
-const NOTE_STORAGE_KEY = "dashtracker_notes_v1";
 const EMPTY_NOTE: NoteFields = { title: "", content: "" };
-
-function restoreNotes(): Note[] {
-  try {
-    const raw = window.localStorage.getItem(NOTE_STORAGE_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.flatMap((candidate: unknown): Note[] => {
-      if (!candidate || typeof candidate !== "object") return [];
-      const item = candidate as Record<string, unknown>;
-      if (typeof item.id !== "string" || typeof item.title !== "string" ||
-          typeof item.content !== "string" || typeof item.createdAt !== "string") return [];
-      return [{
-        id: item.id,
-        title: item.title,
-        content: item.content,
-        pinned: item.pinned === true,
-        createdAt: item.createdAt,
-        updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : item.createdAt,
-      }];
-    });
-  } catch (error) {
-    console.error("Unable to read saved notes:", error);
-    return [];
-  }
-}
 
 type TransactionType = "income" | "expense";
 type FinanceCategory = "Salary" | "Freelance" | "Gift" | "Other income" | "Food" | "Shopping" | "Bills" | "Travel" | "Health" | "Education" | "Entertainment" | "Other expense";
@@ -106,38 +86,12 @@ type Transaction = {
   createdAt: string;
 };
 type TransactionFields = Pick<Transaction, "title" | "amount" | "type" | "category" | "date" | "notes">;
-const FINANCE_STORAGE_KEY = "dashtracker_transactions_v1";
 const INCOME_CATEGORIES: FinanceCategory[] = ["Salary", "Freelance", "Gift", "Other income"];
 const EXPENSE_CATEGORIES: FinanceCategory[] = ["Food", "Shopping", "Bills", "Travel", "Health", "Education", "Entertainment", "Other expense"];
 const EMPTY_TRANSACTION: TransactionFields = { title: "", amount: 0, type: "expense", category: "Food", date: "", notes: "" };
 
 function financeCategories(type: TransactionType): FinanceCategory[] {
   return type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-}
-
-function restoreTransactions(): Transaction[] {
-  try {
-    const raw = window.localStorage.getItem(FINANCE_STORAGE_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.flatMap((candidate: unknown): Transaction[] => {
-      if (!candidate || typeof candidate !== "object") return [];
-      const item = candidate as Record<string, unknown>;
-      if (typeof item.id !== "string" || typeof item.title !== "string" ||
-        typeof item.amount !== "number" || !Number.isFinite(item.amount) || item.amount <= 0 ||
-        (item.type !== "income" && item.type !== "expense") ||
-        typeof item.category !== "string" ||
-        !financeCategories(item.type).includes(item.category as FinanceCategory) ||
-        typeof item.date !== "string" || !item.date || !isDateInput(item.date) ||
-        typeof item.createdAt !== "string") return [];
-      return [{ id: item.id, title: item.title, amount: Math.round(item.amount * 100) / 100,
-        type: item.type, category: item.category as FinanceCategory, date: item.date,
-        notes: typeof item.notes === "string" ? item.notes : "", createdAt: item.createdAt }];
-    });
-  } catch (error) {
-    console.error("Unable to read finance transactions:", error);
-    return [];
-  }
 }
 
 const moneyFormatter = new Intl.NumberFormat("en-IN", {
@@ -158,48 +112,11 @@ type Project = {
   milestones: Milestone[];
 };
 type ProjectFields = Pick<Project, "title" | "description" | "status" | "dueDate">;
-const PROJECT_STORAGE_KEY = "dashtracker_projects_v1";
 const PROJECT_STATUSES: ProjectStatus[] = ["planned", "active", "on-hold", "completed"];
 const EMPTY_PROJECT: ProjectFields = { title: "", description: "", status: "planned", dueDate: "" };
 
 function isProjectStatus(value: unknown): value is ProjectStatus {
   return typeof value === "string" && PROJECT_STATUSES.includes(value as ProjectStatus);
-}
-
-function restoreProjects(): Project[] {
-  try {
-    const raw = window.localStorage.getItem(PROJECT_STORAGE_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.flatMap((candidate: unknown): Project[] => {
-      if (!candidate || typeof candidate !== "object") return [];
-      const item = candidate as Record<string, unknown>;
-      if (typeof item.id !== "string" || typeof item.title !== "string" ||
-        typeof item.createdAt !== "string") return [];
-      const milestones: Milestone[] = Array.isArray(item.milestones)
-        ? item.milestones.flatMap((candidateMilestone: unknown): Milestone[] => {
-            if (!candidateMilestone || typeof candidateMilestone !== "object") return [];
-            const milestone = candidateMilestone as Record<string, unknown>;
-            if (typeof milestone.id !== "string" || typeof milestone.title !== "string" ||
-              typeof milestone.done !== "boolean") return [];
-            return [{ id: milestone.id, title: milestone.title, done: milestone.done,
-              createdAt: typeof milestone.createdAt === "string" ? milestone.createdAt : item.createdAt as string }];
-          }) : [];
-      return [{
-        id: item.id,
-        title: item.title,
-        description: typeof item.description === "string" ? item.description : "",
-        status: isProjectStatus(item.status) ? item.status : "planned",
-        dueDate: typeof item.dueDate === "string" && isDateInput(item.dueDate) ? item.dueDate : "",
-        createdAt: item.createdAt,
-        updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : item.createdAt,
-        milestones,
-      }];
-    });
-  } catch (error) {
-    console.error("Unable to read projects:", error);
-    return [];
-  }
 }
 
 type EventFields = Pick<CalendarEvent, "title" | "date" | "time" | "notes">;
@@ -221,12 +138,9 @@ type Goal = {
 };
 type HabitFields = Pick<Habit, "name" | "category">;
 type GoalFields = Pick<Goal, "title" | "target" | "unit">;
-const HABIT_STORAGE_KEY = "dashtracker_habits_v1";
-const GOAL_STORAGE_KEY = "dashtracker_goals_v1";
 const emptyHabit: HabitFields = { name: "", category: "Personal" };
 const emptyGoal: GoalFields = { title: "", target: 10, unit: "times" };
 
-const EVENT_STORAGE_KEY = "dashtracker_events_v1";
 const emptyEventFields: EventFields = { title: "", date: "", time: "", notes: "" };
 
 type Section =
@@ -242,8 +156,6 @@ type Filter = "all" | "active" | "done";
 type SortMode = "newest" | "oldest" | "due" | "priority";
 type TaskFields = Pick<Task, "title" | "priority" | "dueDate" | "category">;
 
-// IMPORTANT: Keep this key so tasks from DashTracker v0.3 remain available.
-const STORAGE_KEY = "dashtracker_tasks_v1";
 const APP_NAME = "DashTracker";
 const APP_TAGLINE = "PERSONAL LIFE OS";
 const BrandIcon = Activity;
@@ -282,101 +194,135 @@ function isDateInput(value: unknown): value is string {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-function restoreTasks(): Task[] {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const decoded: unknown = JSON.parse(raw);
-    if (!Array.isArray(decoded)) return [];
+type CloudTaskRow = {
+  id: string;
+  title: string;
+  completed: boolean;
+  priority: string;
+  due_date: string | null;
+  category: string;
+  created_at: string;
+};
 
-    // This also upgrades older tasks with no priority, due date, or category.
-    return decoded.flatMap((candidate: unknown): Task[] => {
-      if (!candidate || typeof candidate !== "object") return [];
-      const item = candidate as Record<string, unknown>;
-      if (
-        typeof item.id !== "string" ||
-        typeof item.title !== "string" ||
-        typeof item.completed !== "boolean" ||
-        typeof item.createdAt !== "string"
-      ) return [];
-      return [{
-        id: item.id,
-        title: item.title,
-        completed: item.completed,
-        createdAt: item.createdAt,
-        priority: isPriority(item.priority) ? item.priority : "medium",
-        dueDate: isDateInput(item.dueDate) ? item.dueDate : "",
-        category: isCategory(item.category) ? item.category : "Personal",
-      }];
-    });
-  } catch (error) {
-    console.error("Unable to read saved tasks:", error);
-    return [];
+function mapCloudTask(row: CloudTaskRow): Task {
+  return {
+    id: row.id,
+    title: row.title,
+    completed: row.completed,
+    priority: isPriority(row.priority) ? row.priority : "medium",
+    category: isCategory(row.category) ? row.category : "Personal",
+    dueDate: row.due_date ?? "",
+    createdAt: row.created_at,
+  };
+}
+
+async function readCloudTasks(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<Task[]> {
+  const results: Task[] = [];
+  const pageSize = 500;
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await supabase.from("tasks")
+      .select("id,title,completed,priority,due_date,category,created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(start, start + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as CloudTaskRow[];
+    results.push(...rows.map(mapCloudTask));
+    if (rows.length < pageSize) break;
+  }
+  return results;
+}
+
+type CloudRow = Record<string, unknown>;
+
+// Supabase defaults to a 1,000-row limit; fetch each page until complete.
+async function readCloudRows(
+  supabase: ReturnType<typeof createClient>, table: string, userId: string,
+  orderColumn = "created_at"
+): Promise<CloudRow[]> {
+  const all: CloudRow[] = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase.from(table).select("*")
+      .eq("user_id", userId)
+      .order(orderColumn, { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as CloudRow[];
+    all.push(...rows);
+    if (rows.length < pageSize) return all;
   }
 }
 
-function restoreEvents(): CalendarEvent[] {
-  try {
-    const raw = window.localStorage.getItem(EVENT_STORAGE_KEY);
-    if (!raw) return [];
-    const decoded: unknown = JSON.parse(raw);
-    if (!Array.isArray(decoded)) return [];
-    return decoded.flatMap((value: unknown): CalendarEvent[] => {
-      if (!value || typeof value !== "object") return [];
-      const item = value as Record<string, unknown>;
-      if (typeof item.id !== "string" || typeof item.title !== "string" ||
-          typeof item.date !== "string" || !isDateInput(item.date) || !item.date ||
-          typeof item.time !== "string" || !/^(?:[01]\d|2[0-3]):[0-5]\d$|^$/.test(item.time) ||
-          typeof item.notes !== "string" || typeof item.createdAt !== "string") return [];
-      return [{ id: item.id, title: item.title, date: item.date,
-        time: item.time, notes: item.notes, createdAt: item.createdAt }];
-    });
-  } catch (error) {
-    console.error("Unable to read saved calendar events:", error);
-    return [];
+function cloudError(error: unknown): string {
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message: unknown }).message);
   }
+  return "Request failed. Please check your connection and try again.";
 }
 
-function restoreHabits(): Habit[] {
-  try {
-    const raw = window.localStorage.getItem(HABIT_STORAGE_KEY);
-    const value: unknown = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(value)) return [];
-    return value.flatMap((candidate: unknown): Habit[] => {
-      if (!candidate || typeof candidate !== "object") return [];
-      const item = candidate as Record<string, unknown>;
-      if (typeof item.id !== "string" || typeof item.name !== "string" ||
-          typeof item.createdAt !== "string" || !Array.isArray(item.checkIns)) return [];
-      return [{ id: item.id, name: item.name, createdAt: item.createdAt,
-        category: isCategory(item.category) ? item.category : "Personal",
-        checkIns: [...new Set(item.checkIns.filter((x): x is string =>
-          typeof x === "string" && isDateInput(x) && x !== ""))].sort() }];
-    });
-  } catch (error) {
-    console.error("Unable to read habits:", error);
-    return [];
-  }
+function cloudString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+function cloudDate(value: unknown): string {
+  const text = cloudString(value);
+  return isDateInput(text) ? text : "";
+}
+function cloudNumber(value: unknown): number {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : 0;
 }
 
-function restoreGoals(): Goal[] {
-  try {
-    const raw = window.localStorage.getItem(GOAL_STORAGE_KEY);
-    const value: unknown = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(value)) return [];
-    return value.flatMap((candidate: unknown): Goal[] => {
-      if (!candidate || typeof candidate !== "object") return [];
-      const item = candidate as Record<string, unknown>;
-      if (typeof item.id !== "string" || typeof item.title !== "string" ||
-          typeof item.unit !== "string" || typeof item.createdAt !== "string" ||
-          typeof item.target !== "number" || !Number.isFinite(item.target) || item.target <= 0 ||
-          typeof item.current !== "number" || !Number.isFinite(item.current)) return [];
-      return [{ id: item.id, title: item.title, unit: item.unit,
-        createdAt: item.createdAt, target: item.target, current: Math.max(0, item.current) }];
-    });
-  } catch (error) {
-    console.error("Unable to read goals:", error);
-    return [];
-  }
+const mapCloudEvent = (row: CloudRow): CalendarEvent => ({
+  id: String(row.id), title: cloudString(row.title),
+  date: cloudString(row.event_date),
+  time: cloudString(row.event_time).slice(0, 5),
+  notes: cloudString(row.notes), createdAt: cloudString(row.created_at),
+});
+const mapCloudHabit = (row: CloudRow): Habit => ({
+  id: String(row.id), name: cloudString(row.name),
+  category: isCategory(row.category) ? row.category : "Personal",
+  checkIns: Array.isArray(row.check_ins) ? row.check_ins.map(cloudString).filter(Boolean) : [],
+  createdAt: cloudString(row.created_at),
+});
+const mapCloudGoal = (row: CloudRow): Goal => ({
+  id: String(row.id), title: cloudString(row.title),
+  target: cloudNumber(row.target), current: cloudNumber(row.current),
+  unit: cloudString(row.unit), createdAt: cloudString(row.created_at),
+});
+const mapCloudNote = (row: CloudRow): Note => ({
+  id: String(row.id), title: cloudString(row.title),
+  content: cloudString(row.content), pinned: row.pinned === true,
+  createdAt: cloudString(row.created_at), updatedAt: cloudString(row.updated_at),
+});
+const mapCloudProject = (row: CloudRow): Project => ({
+  id: String(row.id), title: cloudString(row.title),
+  description: cloudString(row.description),
+  status: isProjectStatus(row.status) ? row.status : "planned",
+  dueDate: cloudDate(row.due_date),
+  milestones: Array.isArray(row.milestones) ? row.milestones.flatMap((entry): Milestone[] => {
+    if (!entry || typeof entry !== "object") return [];
+    const value = entry as Record<string, unknown>;
+    if (typeof value.id !== "string" || typeof value.title !== "string") return [];
+    return [{ id: value.id, title: value.title, done: value.done === true,
+      createdAt: cloudString(value.createdAt) || cloudString(row.created_at) }];
+  }) : [],
+  createdAt: cloudString(row.created_at), updatedAt: cloudString(row.updated_at),
+});
+const mapCloudTransaction = (row: CloudRow): Transaction => ({
+  id: String(row.id), title: cloudString(row.title), amount: cloudNumber(row.amount),
+  type: row.type === "income" ? "income" : "expense",
+  category: cloudString(row.category) as FinanceCategory,
+  date: cloudString(row.transaction_date), notes: cloudString(row.notes),
+  createdAt: cloudString(row.created_at),
+});
+
+function taskErrorText(error: unknown): string {
+  return error instanceof Error ? error.message : "Unable to save tasks. Please try again.";
 }
 
 function previousDate(key: string, days: number): string {
@@ -442,7 +388,119 @@ const emptyFields: TaskFields = {
   title: "", priority: "medium", dueDate: "", category: "Personal",
 };
 
-export default function Home() {
+// Authentication gate: keep the dashboard unmounted until Supabase has
+// verified the current user. Server-side route protection is added separately.
+export default function ProtectedHome() {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const [user, setUser] = useState<User | null>(null);
+  const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "error">("checking");
+  const [authError, setAuthError] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function verifyUser() {
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        if (!alive) return;
+        if (error) {
+          setAuthError("Could not verify your session. Check your internet connection and retry.");
+          setAuthStatus("error");
+          return;
+        }
+        if (!data.user) {
+          router.replace("/login");
+          return;
+        }
+        setUser(data.user);
+        setAuthStatus("authenticated");
+      } catch {
+        if (alive) {
+          setAuthError("Could not contact Supabase. Please check your connection and retry.");
+          setAuthStatus("error");
+        }
+      }
+    }
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT" && alive) {
+        setUser(null);
+        setAuthStatus("checking");
+        router.replace("/login");
+      }
+      if (event === "SIGNED_IN" && alive) {
+        // Run validation outside the synchronous auth callback.
+        window.setTimeout(() => { if (alive) void verifyUser(); }, 0);
+      }
+    });
+    void verifyUser();
+    return () => { alive = false; listener.subscription.unsubscribe(); };
+  }, [router, supabase]);
+
+  async function signOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    setAuthError("");
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      // Preserve all existing browser data for future migration.
+      setUser(null);
+      setAuthStatus("checking");
+      // A full navigation also clears the previous dashboard component tree.
+      window.location.replace("/login");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Sign out failed. Please retry.");
+      setSigningOut(false);
+    }
+  }
+
+  if (authStatus !== "authenticated" || !user) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#090909] px-4 text-neutral-100">
+        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#171717] p-8 text-center">
+          <ShieldCheck size={34} className="mx-auto mb-4 text-neutral-200" aria-hidden="true" />
+          <h1 className="text-xl font-semibold">DashTracker</h1>
+          {authStatus === "error" ? (
+            <>
+              <p role="alert" className="mt-3 text-sm text-neutral-300">{authError}</p>
+              <button type="button" onClick={() => window.location.reload()}
+                className="mt-5 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black">Retry</button>
+            </>
+          ) : (
+            <p role="status" className="mt-3 text-sm text-neutral-400">Checking your account...</p>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <Home
+      key={user.id}
+      accountEmail={user.email || "Signed in"}
+      accountUserId={user.id}
+      onSignOut={signOut}
+      signingOut={signingOut}
+      authError={authError}
+    />
+  );
+}
+
+type HomeProps = {
+  accountEmail: string;
+  accountUserId: string;
+  onSignOut: () => Promise<void>;
+  signingOut: boolean;
+  authError: string;
+};
+
+function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }: HomeProps) {
+  const supabase = useMemo(() => createClient(), []);
+  const taskBusyRef = useRef(false);
+  const [taskBusy, setTaskBusy] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [newTask, setNewTask] = useState<TaskFields>(emptyFields);
@@ -464,6 +522,8 @@ export default function Home() {
   const [eventFields, setEventFields] = useState<EventFields>(emptyEventFields);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [eventMessage, setEventMessage] = useState("");
+  const [eventBusy, setEventBusy] = useState(false);
+  const eventBusyRef = useRef(false);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [habitsLoaded, setHabitsLoaded] = useState(false);
@@ -472,6 +532,8 @@ export default function Home() {
   const [goalFields, setGoalFields] = useState<GoalFields>(emptyGoal);
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [habitMessage, setHabitMessage] = useState("");
+  const [habitBusy, setHabitBusy] = useState(false);
+  const habitBusyRef = useRef(false);
 
   useEffect(() => {
     const update = () => setCurrentDate(new Date());
@@ -486,81 +548,143 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Deferred until after hydration; no state update directly in the effect body.
-    const timer = window.setTimeout(() => {
-      setTasks(restoreTasks());
-      setEvents(restoreEvents());
-      setHabits(restoreHabits());
-      setGoals(restoreGoals());
-      setHabitsLoaded(true);
-      setLoaded(true);
-      setEventsLoaded(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+    let active = true;
+    void (async () => {
+      try {
+        const [eventRows, habitRows, goalRows] = await Promise.all([
+          readCloudRows(supabase, "calendar_events", accountUserId),
+          readCloudRows(supabase, "habits", accountUserId),
+          readCloudRows(supabase, "goals", accountUserId),
+        ]);
+        if (!active) return;
+        setEvents(eventRows.map(mapCloudEvent));
+        setHabits(habitRows.map(mapCloudHabit));
+        setGoals(goalRows.map(mapCloudGoal));
+        setEventsLoaded(true);
+        setHabitsLoaded(true);
+      } catch (error) {
+        if (active) {
+          setEventMessage(`Unable to load cloud data: ${cloudError(error)}. Refresh to retry.`);
+          setHabitMessage(`Unable to load cloud data: ${cloudError(error)}. Refresh to retry.`);
+        }
+      }
+    })();
+    return () => { active = false; };
+  }, [supabase, accountUserId]);
+
+  async function runEventMutation(action: () => Promise<void>) {
+    if (!eventsLoaded || eventBusyRef.current) return false;
+    eventBusyRef.current = true;
+    setEventBusy(true);
+    try { await action(); return true; }
+    catch (error) { setEventMessage(`Cloud save failed: ${cloudError(error)}`); return false; }
+    finally { eventBusyRef.current = false; setEventBusy(false); }
+  }
+
+  async function runHabitMutation(action: () => Promise<void>) {
+    if (!habitsLoaded || habitBusyRef.current) return false;
+    habitBusyRef.current = true;
+    setHabitBusy(true);
+    try { await action(); return true; }
+    catch (error) { setHabitMessage(`Cloud save failed: ${cloudError(error)}`); return false; }
+    finally { habitBusyRef.current = false; setHabitBusy(false); }
+  }
 
   useEffect(() => {
-    if (!loaded) return;
+    let active = true;
+    void (async () => {
+      try {
+        const cloudTasks = await readCloudTasks(supabase, accountUserId);
+        if (!active) return;
+        setTasks(cloudTasks);
+        setLoaded(true);
+      } catch (error) {
+        if (active) setTaskMessage(`Could not load cloud tasks: ${taskErrorText(error)}. Retry by refreshing the page.`);
+      }
+    })();
+    return () => { active = false; };
+  }, [supabase, accountUserId]);
+
+  async function runTaskMutation(operation: () => Promise<void>): Promise<boolean> {
+    if (taskBusyRef.current || !loaded) return false;
+    taskBusyRef.current = true;
+    setTaskBusy(true);
+    setTaskMessage("");
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      await operation();
+      return true;
     } catch (error) {
-      console.error("Unable to save tasks:", error);
+      setTaskMessage(`Cloud save failed: ${taskErrorText(error)}. No change was applied locally.`);
+      return false;
+    } finally {
+      taskBusyRef.current = false;
+      setTaskBusy(false);
     }
-  }, [loaded, tasks]);
+  }
 
-  useEffect(() => {
-    if (!eventsLoaded) return;
-    try {
-      window.localStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(events));
-    } catch (error) {
-      console.error("Unable to save calendar events:", error);
-    }
-  }, [events, eventsLoaded]);
-
-  useEffect(() => {
-    if (!habitsLoaded) return;
-    try {
-      window.localStorage.setItem(HABIT_STORAGE_KEY, JSON.stringify(habits));
-    } catch (error) { console.error("Unable to save habits:", error); }
-  }, [habits, habitsLoaded]);
-
-  useEffect(() => {
-    if (!habitsLoaded) return;
-    try {
-      window.localStorage.setItem(GOAL_STORAGE_KEY, JSON.stringify(goals));
-    } catch (error) { console.error("Unable to save goals:", error); }
-  }, [goals, habitsLoaded]);
-
-  function saveHabit(event: FormEvent<HTMLFormElement>) {
+  async function saveHabit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!habitsLoaded) return;
     const name = habitFields.name.trim();
     if (!name) { setHabitMessage("Enter a habit name."); return; }
-    if (editingHabitId) {
-      setHabits((items) => items.map((item) => item.id === editingHabitId
-        ? { ...item, name, category: habitFields.category } : item));
-      setHabitMessage("Habit updated.");
-    } else {
-      setHabits((items) => [{ id: crypto.randomUUID(), name,
-        category: habitFields.category, createdAt: new Date().toISOString(), checkIns: [] }, ...items]);
-      setHabitMessage("Habit created.");
-    }
+    const current = habits.find(item => item.id === editingHabitId);
+    if (editingHabitId && !current) return;
+    const habit: Habit = current ? { ...current, name, category: habitFields.category } : {
+      id: crypto.randomUUID(), name, category: habitFields.category,
+      createdAt: new Date().toISOString(), checkIns: []
+    };
+    const saved = await runHabitMutation(async () => {
+      if (current) {
+        const { data, error } = await supabase.from("habits")
+          .update({ name: habit.name, category: habit.category })
+          .eq("id", habit.id).eq("user_id", accountUserId).select("id").single();
+        if (error || !data) throw error ?? new Error("Habit not found.");
+        setHabits(items => items.map(item => item.id === habit.id ? habit : item));
+      } else {
+        const { error } = await supabase.from("habits").insert({
+          id: habit.id, user_id: accountUserId, name: habit.name,
+          category: habit.category, check_ins: [], created_at: habit.createdAt
+        });
+        if (error) throw error;
+        setHabits(items => [habit, ...items]);
+      }
+    });
+    if (!saved) return;
+    setHabitMessage(current ? "Habit updated in cloud." : "Habit created in cloud.");
     setEditingHabitId(null);
     setHabitFields(emptyHabit);
   }
 
-  function toggleHabit(id: string, date: string) {
+  async function toggleHabit(id: string, date: string) {
     if (!habitsLoaded || !date) return;
-    setHabits((items) => items.map((item) => {
-      if (item.id !== id) return item;
-      const done = new Set(item.checkIns);
-      if (done.has(date)) done.delete(date);
-      else done.add(date);
-      return { ...item, checkIns: [...done].sort() };
-    }));
+    const habit = habits.find(item => item.id === id);
+    if (!habit) return;
+    const days = new Set(habit.checkIns);
+    if (days.has(date)) days.delete(date); else days.add(date);
+    const checkIns = [...days].sort();
+    await runHabitMutation(async () => {
+      const { data, error } = await supabase.from("habits")
+        .update({ check_ins: checkIns }).eq("id", id)
+        .eq("user_id", accountUserId).select("id").single();
+      if (error || !data) throw error ?? new Error("Habit not found.");
+      setHabits(items => items.map(item => item.id === id ? { ...item, checkIns } : item));
+    });
   }
 
-  function saveGoal(event: FormEvent<HTMLFormElement>) {
+  async function deleteHabit(id: string) {
+    const saved = await runHabitMutation(async () => {
+      const { data, error } = await supabase.from("habits").delete()
+        .eq("id", id).eq("user_id", accountUserId).select("id").single();
+      if (error || !data) throw error ?? new Error("Habit not found.");
+      setHabits(items => items.filter(item => item.id !== id));
+    });
+    if (saved) {
+      if (editingHabitId === id) { setEditingHabitId(null); setHabitFields(emptyHabit); }
+      setHabitMessage("Habit deleted from cloud.");
+    }
+  }
+
+  async function saveGoal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!habitsLoaded) return;
     const title = goalFields.title.trim();
@@ -568,22 +692,58 @@ export default function Home() {
     if (!title || !Number.isFinite(goalFields.target) || goalFields.target <= 0) {
       setHabitMessage("Enter a goal name and a positive target."); return;
     }
-    if (editingGoalId) {
-      setGoals((items) => items.map((item) => item.id === editingGoalId
-        ? { ...item, title, unit, target: goalFields.target } : item));
-      setHabitMessage("Goal updated.");
-    } else {
-      setGoals((items) => [{ id: crypto.randomUUID(), title, unit,
-        target: goalFields.target, current: 0, createdAt: new Date().toISOString() }, ...items]);
-      setHabitMessage("Goal created.");
-    }
+    const current = goals.find(item => item.id === editingGoalId);
+    if (editingGoalId && !current) return;
+    const goal: Goal = current ? { ...current, title, unit, target: goalFields.target } : {
+      id: crypto.randomUUID(), title, unit, target: goalFields.target,
+      current: 0, createdAt: new Date().toISOString()
+    };
+    const saved = await runHabitMutation(async () => {
+      if (current) {
+        const { data, error } = await supabase.from("goals").update({
+          title: goal.title, unit: goal.unit, target: goal.target
+        }).eq("id", goal.id).eq("user_id", accountUserId).select("id").single();
+        if (error || !data) throw error ?? new Error("Goal not found.");
+        setGoals(items => items.map(item => item.id === goal.id ? goal : item));
+      } else {
+        const { error } = await supabase.from("goals").insert({
+          id: goal.id, user_id: accountUserId, title: goal.title,
+          unit: goal.unit, target: goal.target, current: 0, created_at: goal.createdAt
+        });
+        if (error) throw error;
+        setGoals(items => [goal, ...items]);
+      }
+    });
+    if (!saved) return;
+    setHabitMessage(current ? "Goal updated in cloud." : "Goal created in cloud.");
     setGoalFields(emptyGoal);
     setEditingGoalId(null);
   }
 
-  function changeGoalProgress(id: string, difference: number) {
-    setGoals((items) => items.map((item) => item.id === id
-      ? { ...item, current: Math.max(0, Math.min(item.target, item.current + difference)) } : item));
+  async function changeGoalProgress(id: string, difference: number) {
+    const goal = goals.find(item => item.id === id);
+    if (!goal) return;
+    const current = Math.max(0, Math.min(goal.target, goal.current + difference));
+    await runHabitMutation(async () => {
+      const { data, error } = await supabase.from("goals")
+        .update({ current }).eq("id", id).eq("user_id", accountUserId)
+        .select("id").single();
+      if (error || !data) throw error ?? new Error("Goal not found.");
+      setGoals(items => items.map(item => item.id === id ? { ...item, current } : item));
+    });
+  }
+
+  async function deleteGoal(id: string) {
+    const saved = await runHabitMutation(async () => {
+      const { data, error } = await supabase.from("goals").delete()
+        .eq("id", id).eq("user_id", accountUserId).select("id").single();
+      if (error || !data) throw error ?? new Error("Goal not found.");
+      setGoals(items => items.filter(item => item.id !== id));
+    });
+    if (saved) {
+      if (editingGoalId === id) { setEditingGoalId(null); setGoalFields(emptyGoal); }
+      setHabitMessage("Goal deleted from cloud.");
+    }
   }
 
   function selectCalendarDate(date: string) {
@@ -594,31 +754,44 @@ export default function Home() {
     setEventMessage("");
   }
 
-  function saveCalendarEvent(event: FormEvent<HTMLFormElement>) {
+  async function saveCalendarEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!eventsLoaded) { setEventMessage("Calendar is loading. Please retry."); return; }
+    if (!eventsLoaded) { setEventMessage("Calendar is loading."); return; }
     const title = eventFields.title.trim();
     const date = eventFields.date || selectedDate;
     if (!title || !date || !isDateInput(date)) {
-      setEventMessage("Enter an event name and a valid date.");
-      return;
+      setEventMessage("Enter a title and valid date."); return;
     }
     if (eventFields.time && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(eventFields.time)) {
-      setEventMessage("Choose a valid time.");
-      return;
+      setEventMessage("Choose a valid time."); return;
     }
-    if (editingEventId) {
-      setEvents((previous) => previous.map((item) => item.id === editingEventId
-        ? { ...item, title, date, time: eventFields.time, notes: eventFields.notes.trim() }
-        : item));
-      setEventMessage("Event updated.");
-    } else {
-      setEvents((previous) => [{
-        id: crypto.randomUUID(), title, date, time: eventFields.time,
-        notes: eventFields.notes.trim(), createdAt: new Date().toISOString(),
-      }, ...previous]);
-      setEventMessage("Event added.");
-    }
+    const current = events.find(item => item.id === editingEventId);
+    if (editingEventId && !current) return;
+    const next: CalendarEvent = {
+      id: current?.id ?? crypto.randomUUID(), title, date,
+      time: eventFields.time, notes: eventFields.notes.trim(),
+      createdAt: current?.createdAt ?? new Date().toISOString()
+    };
+    const saved = await runEventMutation(async () => {
+      if (current) {
+        const { data, error } = await supabase.from("calendar_events").update({
+          title: next.title, event_date: next.date, event_time: next.time || null,
+          notes: next.notes
+        }).eq("id", next.id).eq("user_id", accountUserId).select("id").single();
+        if (error || !data) throw error ?? new Error("Event not found.");
+        setEvents(items => items.map(item => item.id === next.id ? next : item));
+      } else {
+        const { error } = await supabase.from("calendar_events").insert({
+          id: next.id, user_id: accountUserId, title: next.title,
+          event_date: next.date, event_time: next.time || null, notes: next.notes,
+          created_at: next.createdAt
+        });
+        if (error) throw error;
+        setEvents(items => [next, ...items]);
+      }
+    });
+    if (!saved) return;
+    setEventMessage(current ? "Event updated in cloud." : "Event saved in cloud.");
     setSelectedDate(date);
     setViewMonth(date.slice(0, 7));
     setEditingEventId(null);
@@ -637,10 +810,16 @@ export default function Home() {
     setEventMessage("");
   }
 
-  function deleteCalendarEvent(id: string) {
-    setEvents((previous) => previous.filter((item) => item.id !== id));
+  async function deleteCalendarEvent(id: string) {
+    const saved = await runEventMutation(async () => {
+      const { data, error } = await supabase.from("calendar_events").delete()
+        .eq("id", id).eq("user_id", accountUserId).select("id").single();
+      if (error || !data) throw error ?? new Error("Event not found.");
+      setEvents(items => items.filter(item => item.id !== id));
+    });
+    if (!saved) return;
     if (editingEventId === id) cancelCalendarEdit();
-    setEventMessage("Event deleted.");
+    setEventMessage("Event deleted from cloud.");
   }
 
   const today = currentDate ? localDateKey(currentDate) : "";
@@ -673,9 +852,9 @@ export default function Home() {
     return result;
   }, [tasks, filter, categoryFilter, sortMode, search]);
 
-  function addTask(event: FormEvent<HTMLFormElement>) {
+  async function addTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!loaded) { setTaskMessage("Loading saved tasks. Please try again."); return; }
+    if (!loaded) { setTaskMessage("Cloud tasks are loading. Please try again."); return; }
     const title = newTask.title.trim();
     if (!title) {
       setTaskMessage("Enter a task title first.");
@@ -686,31 +865,55 @@ export default function Home() {
       setTaskMessage("Please choose a valid due date.");
       return;
     }
-    setTasks((previous) => [{
-      ...newTask,
-      title,
-      id: crypto.randomUUID(),
-      completed: false,
+    const task: Task = {
+      ...newTask, title, id: crypto.randomUUID(), completed: false,
       createdAt: new Date().toISOString(),
-    }, ...previous]);
+    };
+    const saved = await runTaskMutation(async () => {
+      const { error } = await supabase.from("tasks").insert({
+        id: task.id, user_id: accountUserId, title: task.title,
+        completed: task.completed, priority: task.priority,
+        due_date: task.dueDate || null, category: task.category,
+        created_at: task.createdAt,
+      });
+      if (error) throw error;
+      setTasks((previous) => [task, ...previous]);
+    });
+    if (!saved) return;
     setNewTask(emptyFields);
     setFilter("all");
     setCategoryFilter("all");
     setSearch("");
     setSortMode("newest");
-    setTaskMessage("Task added successfully.");
+    setTaskMessage("Task saved to Supabase.");
     taskInputRef.current?.focus();
   }
 
-  function toggleTask(id: string) {
-    setTasks((previous) => previous.map((task) =>
-      task.id === id ? { ...task, completed: !task.completed } : task));
+  async function toggleTask(id: string) {
+    const task = tasks.find((item) => item.id === id);
+    if (!task) return;
+    await runTaskMutation(async () => {
+      const { data, error } = await supabase.from("tasks")
+        .update({ completed: !task.completed })
+        .eq("id", id).eq("user_id", accountUserId)
+        .select("id").single();
+      if (error || !data) throw error ?? new Error("Task not found in your cloud account.");
+      setTasks((previous) => previous.map((item) => item.id === id
+        ? { ...item, completed: !task.completed } : item));
+    });
   }
 
-  function deleteTask(id: string) {
-    setTasks((previous) => previous.filter((task) => task.id !== id));
+  async function deleteTask(id: string) {
+    const saved = await runTaskMutation(async () => {
+      const { data, error } = await supabase.from("tasks")
+        .delete().eq("id", id).eq("user_id", accountUserId)
+        .select("id").single();
+      if (error || !data) throw error ?? new Error("Task not found in your cloud account.");
+      setTasks((previous) => previous.filter((task) => task.id !== id));
+    });
+    if (!saved) return;
     if (editingId === id) cancelEdit();
-    setTaskMessage("Task deleted.");
+    setTaskMessage("Task deleted from Supabase.");
   }
 
   function beginEdit(task: Task) {
@@ -723,14 +926,25 @@ export default function Home() {
     setEditingFields(emptyFields);
   }
 
-  function saveEdit(event: FormEvent<HTMLFormElement>) {
+  async function saveEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const title = editingFields.title.trim();
     if (!editingId || !title || !isDateInput(editingFields.dueDate)) return;
-    setTasks((previous) => previous.map((task) => task.id === editingId
-      ? { ...task, ...editingFields, title } : task));
+    const id = editingId;
+    const saved = await runTaskMutation(async () => {
+      const { data, error } = await supabase.from("tasks").update({
+        title,
+        priority: editingFields.priority,
+        due_date: editingFields.dueDate || null,
+        category: editingFields.category,
+      }).eq("id", id).eq("user_id", accountUserId).select("id").single();
+      if (error || !data) throw error ?? new Error("Task not found in your cloud account.");
+      setTasks((previous) => previous.map((task) => task.id === id
+        ? { ...task, ...editingFields, title } : task));
+    });
+    if (!saved) return;
     cancelEdit();
-    setTaskMessage("Task updated.");
+    setTaskMessage("Task updated in Supabase.");
   }
 
   function navigate(nextSection: Section) {
@@ -747,7 +961,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#090909] font-sans text-neutral-100">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/10 bg-[#101010] lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col overflow-y-auto overscroll-contain border-r border-white/10 bg-[#101010] lg:flex">
         <div className="flex h-20 items-center gap-3 px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 text-neutral-950">
             <BrandIcon size={23} />
@@ -776,20 +990,31 @@ export default function Home() {
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><Target size={16} />Your workspace</div>
             <p className="text-xs leading-5 text-neutral-400">Track your day, stay organized, and build better habits.</p>
           </div>
-          <p className="mt-5 px-3 text-xs text-neutral-500">DashTracker v0.9</p>
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
+            <div className="mb-1 flex items-center gap-2 text-xs font-medium text-neutral-200">
+              <UserRound size={15} aria-hidden="true" /> Signed in as
+            </div>
+            <p className="break-all text-xs text-neutral-400">{accountEmail}</p>
+          </div>
+          <button type="button" onClick={() => void onSignOut()} disabled={signingOut}
+            className="mt-3 flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-3 text-sm text-neutral-200 hover:bg-white/10 disabled:opacity-50">
+            <LogOut size={17} aria-hidden="true" /> {signingOut ? "Signing out..." : "Sign out"}
+          </button>
+          {authError && <p role="alert" className="mt-3 break-words text-xs text-red-300">{authError}</p>}
+          <p className="mt-5 px-3 text-xs text-neutral-500">DashTracker v1.2 · Cloud</p>
         </div>
       </aside>
 
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain lg:hidden">
           <button type="button" aria-label="Close navigation" className="absolute inset-0 bg-black/70"
             onClick={() => setMobileMenuOpen(false)} />
-          <div className="relative h-full w-[min(82vw,300px)] border-r border-white/10 bg-[#171717] p-5 shadow-2xl">
-            <div className="mb-8 flex items-center justify-between">
+          <div className="relative flex min-h-full w-[min(82vw,300px)] flex-col border-r border-white/10 bg-[#171717] p-5 shadow-2xl">
+            <div className="mb-5 flex shrink-0 items-center justify-between">
               <span className="font-bold">{APP_NAME}</span>
               <button type="button" aria-label="Close menu" onClick={() => setMobileMenuOpen(false)}><X size={21} /></button>
             </div>
-            <nav aria-label="Mobile menu" className="space-y-2">
+            <nav aria-label="Mobile menu" className="space-y-2 pb-3">
               {navigation.map(({ id, label, icon: Icon }) => (
                 <button key={id} type="button" onClick={() => navigate(id)}
                   className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm ${
@@ -799,6 +1024,16 @@ export default function Home() {
                 </button>
               ))}
             </nav>
+            <div className="mt-auto shrink-0 border-t border-white/10 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+              <p className="mb-3 break-all text-xs text-neutral-400">{accountEmail}</p>
+              <button type="button" aria-label="Sign out from mobile menu"
+                onClick={() => { setMobileMenuOpen(false); void onSignOut(); }}
+                disabled={signingOut}
+                className="relative z-10 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-medium text-white hover:bg-white/15 active:bg-white/20 disabled:opacity-50">
+                <LogOut size={17} aria-hidden="true" />{signingOut ? "Signing out..." : "Sign out"}
+              </button>
+              {authError && <p role="alert" className="mt-3 break-words text-xs text-red-300">{authError}</p>}
+            </div>
           </div>
         </div>
       )}
@@ -814,14 +1049,22 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden text-xs text-neutral-500 md:inline">
-              {currentDate ? dateLabel(currentDate) : ""}
-            </span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-sm font-semibold text-neutral-200">DT</div>
+              <span className="hidden text-xs text-neutral-500 md:inline">
+                {currentDate ? dateLabel(currentDate) : ""}
+              </span>
+              <span className="hidden max-w-48 truncate text-xs text-neutral-400 xl:inline" title={accountEmail}>
+                {accountEmail}
+              </span>
+              <button type="button" onClick={() => void onSignOut()} disabled={signingOut}
+                aria-label="Sign out of DashTracker" title="Sign out"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-neutral-200 hover:bg-white/20 disabled:opacity-50">
+                <LogOut size={16} aria-hidden="true" />
+              </button>
           </div>
         </header>
 
         <main className="mx-auto max-w-7xl px-4 pb-28 pt-8 sm:px-8 lg:pb-12">
+          {authError && <p role="alert" className="mb-5 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm text-neutral-200">{authError}</p>}
           {section === "dashboard" ? (
             <>
               <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -899,7 +1142,7 @@ export default function Home() {
                     <p className="mt-1 text-xs text-neutral-500">{pendingCount} pending · {completedCount} completed</p>
                   </div>
                   <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs text-neutral-400">
-                    <CheckCircle2 size={15} /> Saved in this browser
+                    <CheckCircle2 size={15} /> {taskBusy ? "Saving to cloud..." : "Saved in Supabase"}
                   </div>
                 </div>
 
@@ -909,7 +1152,7 @@ export default function Home() {
                       onChange={(event) => { setNewTask((v) => ({ ...v, title: event.target.value })); setTaskMessage(""); }}
                       placeholder="What do you need to do?" maxLength={200} aria-label="New task title"
                       aria-describedby="task-form-message" className={`${fieldClass} flex-1`} />
-                    <button type="submit"
+                    <button type="submit" disabled={!loaded || taskBusy}
                       className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-neutral-100 px-5 text-sm font-semibold text-neutral-950 transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
                       <Plus size={18} />Add Task
                     </button>
@@ -998,8 +1241,8 @@ export default function Home() {
                   const isDueToday = Boolean(today && task.dueDate === today && !task.completed);
                   return (
                     <div key={task.id} className="flex items-start gap-3 p-4 transition hover:bg-white/[0.025] sm:px-6">
-                      <button type="button" aria-label={task.completed ? `Mark ${task.title} incomplete` : `Complete ${task.title}`}
-                        onClick={() => toggleTask(task.id)}
+                      <button type="button" disabled={!loaded || taskBusy} aria-label={task.completed ? `Mark ${task.title} incomplete` : `Complete ${task.title}`}
+                        onClick={() => void toggleTask(task.id)}
                         className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition ${
                           task.completed ? "border-white/40 bg-neutral-100 text-neutral-950" : "border-neutral-600 text-transparent hover:border-white"
                         }`}><Check size={14} /></button>
@@ -1029,7 +1272,7 @@ export default function Home() {
                               </label>
                             </div>
                             <div className="flex gap-2">
-                              <button type="submit" disabled={!editingFields.title.trim()}
+                              <button type="submit" disabled={taskBusy || !editingFields.title.trim()}
                                 className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-black disabled:opacity-40">
                                 <Check size={15} />Save
                               </button>
@@ -1061,7 +1304,7 @@ export default function Home() {
                         <div className="flex shrink-0 items-center">
                           <button type="button" onClick={() => beginEdit(task)} aria-label={`Edit ${task.title}`} title="Edit task"
                             className="rounded-lg p-2 text-neutral-500 transition hover:bg-white/10 hover:text-white"><Pencil size={16} /></button>
-                          <button type="button" onClick={() => deleteTask(task.id)} aria-label={`Delete ${task.title}`} title="Delete task"
+                          <button type="button" disabled={taskBusy} onClick={() => void deleteTask(task.id)} aria-label={`Delete ${task.title}`} title="Delete task"
                             className="rounded-lg p-2 text-neutral-500 transition hover:bg-white/10 hover:text-white"><Trash2 size={17} /></button>
                         </div>
                       )}
@@ -1081,6 +1324,7 @@ export default function Home() {
               eventFields={eventFields}
               editingEventId={editingEventId}
               eventMessage={eventMessage}
+              eventBusy={eventBusy}
               onSelectDate={selectCalendarDate}
               onViewMonth={setViewMonth}
               onJumpToday={() => { if (today) selectCalendarDate(today); }}
@@ -1102,11 +1346,7 @@ export default function Home() {
               }}
               onCancelHabit={() => { setEditingHabitId(null); setHabitFields(emptyHabit); }}
               onSaveHabit={saveHabit} onToggleHabit={toggleHabit}
-              onDeleteHabit={(id) => {
-                setHabits((items) => items.filter((item) => item.id !== id));
-                if (editingHabitId === id) { setEditingHabitId(null); setHabitFields(emptyHabit); }
-                setHabitMessage("Habit deleted.");
-              }}
+               onDeleteHabit={(id) => { void deleteHabit(id); }}
               goalFields={goalFields} onGoalFields={setGoalFields}
               editingGoalId={editingGoalId} onEditGoal={(goal) => {
                 setEditingGoalId(goal.id);
@@ -1114,19 +1354,15 @@ export default function Home() {
               }}
               onCancelGoal={() => { setEditingGoalId(null); setGoalFields(emptyGoal); }}
               onSaveGoal={saveGoal} onChangeGoal={changeGoalProgress}
-              onDeleteGoal={(id) => {
-                setGoals((items) => items.filter((item) => item.id !== id));
-                if (editingGoalId === id) { setEditingGoalId(null); setGoalFields(emptyGoal); }
-                setHabitMessage("Goal deleted.");
-              }}
-              message={habitMessage}
+               onDeleteGoal={(id) => { void deleteGoal(id); }}
+              message={habitMessage} busy={habitBusy}
             />
           ) : section === "notes" ? (
-            <NotesPanel />
+            <NotesPanel userId={accountUserId} />
           ) : section === "projects" ? (
-            <ProjectsPanel today={today} />
+            <ProjectsPanel today={today} userId={accountUserId} />
           ) : section === "finance" ? (
-            <FinancePanel today={today} />
+            <FinancePanel today={today} userId={accountUserId} />
           ) : (
             <div className={`${cardClass} p-10 text-center`}>
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-neutral-100">
@@ -1172,6 +1408,7 @@ type CalendarPanelProps = {
   eventFields: EventFields;
   editingEventId: string | null;
   eventMessage: string;
+  eventBusy: boolean;
   onSelectDate: (date: string) => void;
   onViewMonth: (month: string) => void;
   onJumpToday: () => void;
@@ -1185,7 +1422,7 @@ type CalendarPanelProps = {
 };
 
 function CalendarPanel({ tasks, events, loaded, selectedDate, viewMonth, today,
-  eventFields, editingEventId, eventMessage, onSelectDate, onViewMonth,
+  eventFields, editingEventId, eventMessage, eventBusy, onSelectDate, onViewMonth,
   onJumpToday, onEventFields, onSaveEvent, onEditEvent, onDeleteEvent,
   onCancelEventEdit, onToggleTask, onGoToTasks }: CalendarPanelProps) {
   const firstDay = viewMonth ? firstOfMonth(viewMonth) : null;
@@ -1346,12 +1583,12 @@ function CalendarPanel({ tasks, events, loaded, selectedDate, viewMonth, today,
                 placeholder="Event details" className={`${fieldClass} mt-1 py-3`} />
             </label>
             <div className="flex flex-wrap gap-2">
-              <button type="submit" disabled={!loaded || !selectedDate}
+              <button type="submit" disabled={!loaded || !selectedDate || eventBusy}
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-neutral-100 px-4 text-sm font-semibold text-neutral-950 hover:bg-white disabled:opacity-40"><Plus size={16} />{editingEventId ? "Save changes" : "Add event"}</button>
               {editingEventId && <button type="button" onClick={onCancelEventEdit}
                 className="rounded-xl border border-white/20 px-4 text-sm text-neutral-200 hover:bg-white/10">Cancel edit</button>}
             </div>
-            <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">{eventMessage || "Events are saved only in this browser for now."}</p>
+            <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">{eventMessage || "Events are saved in Supabase."}</p>
           </form>
         </section>
       </div>
@@ -1382,12 +1619,13 @@ type HabitsPanelProps = {
   onChangeGoal: (id: string, amount: number) => void;
   onDeleteGoal: (id: string) => void;
   message: string;
+  busy: boolean;
 };
 
 function HabitsPanel({ habits, goals, loaded, today, habitFields, onHabitFields,
   editingHabitId, onEditHabit, onCancelHabit, onSaveHabit, onToggleHabit, onDeleteHabit,
   goalFields, onGoalFields, editingGoalId, onEditGoal, onCancelGoal, onSaveGoal,
-  onChangeGoal, onDeleteGoal, message }: HabitsPanelProps) {
+  onChangeGoal, onDeleteGoal, message, busy }: HabitsPanelProps) {
   const weekDays = today ? Array.from({ length: 7 }, (_, i) => previousDate(today, 6 - i)) : [];
   const doneToday = habits.filter((habit) => today && habit.checkIns.includes(today)).length;
   const percent = habits.length ? Math.round(doneToday / habits.length * 100) : 0;
@@ -1519,7 +1757,7 @@ function HabitsPanel({ habits, goals, loaded, today, habitFields, onHabitFields,
                 </select>
               </label>
               <div className="flex flex-wrap gap-2">
-                <button type="submit" disabled={!loaded} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-neutral-100 px-4 text-sm font-semibold text-neutral-950 hover:bg-white disabled:opacity-40">
+                <button type="submit" disabled={!loaded || busy} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-neutral-100 px-4 text-sm font-semibold text-neutral-950 hover:bg-white disabled:opacity-40">
                   <Plus size={16}/>{editingHabitId ? "Save habit" : "Add habit"}
                 </button>
                 {editingHabitId && <button type="button" onClick={onCancelHabit} className="rounded-xl border border-white/20 px-4 text-sm hover:bg-white/10">Cancel</button>}
@@ -1545,21 +1783,24 @@ function HabitsPanel({ habits, goals, loaded, today, habitFields, onHabitFields,
                 </label>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="submit" disabled={!loaded} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-neutral-100 px-4 text-sm font-semibold text-neutral-950 hover:bg-white disabled:opacity-40">
+                <button type="submit" disabled={!loaded || busy} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-neutral-100 px-4 text-sm font-semibold text-neutral-950 hover:bg-white disabled:opacity-40">
                   <Plus size={16}/>{editingGoalId ? "Save goal" : "Add goal"}
                 </button>
                 {editingGoalId && <button type="button" onClick={onCancelGoal} className="rounded-xl border border-white/20 px-4 text-sm hover:bg-white/10">Cancel</button>}
               </div>
             </form>
           </section>
-          <p role="status" aria-live="polite" className="px-1 text-xs text-neutral-400">{message || "Habits and goals are saved in this browser only for now."}</p>
+          <p role="status" aria-live="polite" className="px-1 text-xs text-neutral-400">{message || "Habits and goals are saved in Supabase."}</p>
         </div>
       </div>
     </div>
   );
 }
 
-function NotesPanel() {
+function NotesPanel({ userId }: { userId: string }) {
+  const supabase = useMemo(() => createClient(), []);
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [notesLoaded, setNotesLoaded] = useState(false);
   const [fields, setFields] = useState<NoteFields>(EMPTY_NOTE);
@@ -1569,22 +1810,26 @@ function NotesPanel() {
   const noteTitleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Load after hydration and before enabling writes to protect saved data.
-    const timer = window.setTimeout(() => {
-      setNotes(restoreNotes());
-      setNotesLoaded(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+    let active = true;
+    void (async () => {
+      try {
+        const rows = await readCloudRows(supabase, "notes", userId);
+        if (active) { setNotes(rows.map(mapCloudNote)); setNotesLoaded(true); }
+      } catch (error) {
+        if (active) setMessage(`Unable to load cloud notes: ${cloudError(error)}. Refresh to retry.`);
+      }
+    })();
+    return () => { active = false; };
+  }, [supabase, userId]);
 
-  useEffect(() => {
-    if (!notesLoaded) return;
-    try {
-      window.localStorage.setItem(NOTE_STORAGE_KEY, JSON.stringify(notes));
-    } catch (error) {
-      console.error("Unable to save notes:", error);
-    }
-  }, [notes, notesLoaded]);
+  async function runNoteMutation(action: () => Promise<void>) {
+    if (!notesLoaded || busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
+    try { await action(); return true; }
+    catch (error) { setMessage(`Cloud save failed: ${cloudError(error)}`); return false; }
+    finally { busyRef.current = false; setBusy(false); }
+  }
 
   const visibleNotes = useMemo(() => {
     const searchTerm = query.trim().toLowerCase();
@@ -1600,28 +1845,37 @@ function NotesPanel() {
     setFields(EMPTY_NOTE);
   }
 
-  function saveNote(event: FormEvent<HTMLFormElement>) {
+  async function saveNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!notesLoaded) return;
     const title = fields.title.trim();
     const content = fields.content.trim();
-    if (!title) {
-      setMessage("Enter a note title first.");
-      noteTitleRef.current?.focus();
-      return;
-    }
+    if (!title) { setMessage("Enter a note title."); noteTitleRef.current?.focus(); return; }
+    const current = notes.find(item => item.id === editingNoteId);
+    if (editingNoteId && !current) return;
     const now = new Date().toISOString();
-    if (editingNoteId) {
-      setNotes((items) => items.map((item) => item.id === editingNoteId
-        ? { ...item, title, content, updatedAt: now } : item));
-      setMessage("Note updated.");
-    } else {
-      setNotes((items) => [{ id: crypto.randomUUID(), title, content,
-        pinned: false, createdAt: now, updatedAt: now }, ...items]);
-      setMessage("Note created.");
-    }
-    resetEditor();
-    setQuery("");
+    const note: Note = current ? { ...current, title, content, updatedAt: now } : {
+      id: crypto.randomUUID(), title, content, pinned: false, createdAt: now, updatedAt: now
+    };
+    const saved = await runNoteMutation(async () => {
+      if (current) {
+        const { data, error } = await supabase.from("notes").update({
+          title: note.title, content: note.content, updated_at: now
+        }).eq("id", note.id).eq("user_id", userId).select("id").single();
+        if (error || !data) throw error ?? new Error("Note not found.");
+        setNotes(items => items.map(item => item.id === note.id ? note : item));
+      } else {
+        const { error } = await supabase.from("notes").insert({
+          id: note.id, user_id: userId, title: note.title, content: note.content,
+          pinned: false, created_at: now, updated_at: now
+        });
+        if (error) throw error;
+        setNotes(items => [note, ...items]);
+      }
+    });
+    if (!saved) return;
+    setMessage(current ? "Note updated in cloud." : "Note saved in cloud.");
+    resetEditor(); setQuery("");
   }
 
   function beginEdit(note: Note) {
@@ -1632,28 +1886,41 @@ function NotesPanel() {
     window.setTimeout(() => noteTitleRef.current?.focus(), 0);
   }
 
-  function togglePin(id: string) {
-    setNotes((items) => items.map((item) => item.id === id
-      ? { ...item, pinned: !item.pinned } : item));
+  async function togglePin(id: string) {
+    const note = notes.find(item => item.id === id);
+    if (!note) return;
+    const pinned = !note.pinned;
+    await runNoteMutation(async () => {
+      const { data, error } = await supabase.from("notes").update({ pinned })
+        .eq("id", id).eq("user_id", userId).select("id").single();
+      if (error || !data) throw error ?? new Error("Note not found.");
+      setNotes(items => items.map(item => item.id === id ? { ...item, pinned } : item));
+    });
   }
 
-  function deleteNote(id: string) {
-    setNotes((items) => items.filter((item) => item.id !== id));
+  async function deleteNote(id: string) {
+    const saved = await runNoteMutation(async () => {
+      const { data, error } = await supabase.from("notes").delete()
+        .eq("id", id).eq("user_id", userId).select("id").single();
+      if (error || !data) throw error ?? new Error("Note not found.");
+      setNotes(items => items.filter(item => item.id !== id));
+    });
+    if (!saved) return;
     if (editingNoteId === id) resetEditor();
-    setMessage("Note deleted.");
+    setMessage("Note deleted from cloud.");
   }
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard title="Total Notes" value={notesLoaded ? String(notes.length) : "—"}
-          description="Saved in this browser" icon={StickyNote} />
+          description="Saved in Supabase" icon={StickyNote} />
         <StatCard title="Pinned Notes" value={notesLoaded ? String(notes.filter((note) => note.pinned).length) : "—"}
           description="At the top of your list" icon={Pin} />
         <div className="col-span-2 sm:col-span-1 rounded-2xl border border-white/10 bg-[#171717] p-4 sm:p-5">
           <p className="text-xs font-medium text-neutral-400">Quick access</p>
           <p className="mt-4 text-sm text-neutral-200">Find notes by title or content.</p>
-          <p className="mt-2 text-xs text-neutral-500">Changes are stored on this device.</p>
+          <p className="mt-2 text-xs text-neutral-500">Notes sync through Supabase on refresh.</p>
         </div>
       </div>
 
@@ -1733,7 +2000,7 @@ function NotesPanel() {
                 className={`${fieldClass} mt-1 resize-y py-3 leading-6`} />
             </label>
             <div className="flex flex-wrap gap-2">
-              <button type="submit" disabled={!notesLoaded}
+              <button type="submit" disabled={!notesLoaded || busy}
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-neutral-100 px-4 text-sm font-semibold text-neutral-950 hover:bg-white disabled:opacity-40">
                 <Plus size={16} />{editingNoteId ? "Save changes" : "Add note"}
               </button>
@@ -1741,7 +2008,7 @@ function NotesPanel() {
                 className="rounded-xl border border-white/20 px-4 text-sm text-neutral-200 hover:bg-white/10">Cancel edit</button>}
             </div>
             <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">
-              {message || "Notes are saved on this browser only. Cloud sync is planned."}
+              {message || "Notes are saved in Supabase."}
             </p>
           </form>
         </section>
@@ -1750,7 +2017,10 @@ function NotesPanel() {
   );
 }
 
-function ProjectsPanel({ today }: { today: string }) {
+function ProjectsPanel({ today, userId }: { today: string; userId: string }) {
+  const supabase = useMemo(() => createClient(), []);
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [fields, setFields] = useState<ProjectFields>(EMPTY_PROJECT);
@@ -1764,21 +2034,37 @@ function ProjectsPanel({ today }: { today: string }) {
   const projectTitleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setProjects(restoreProjects());
-      setProjectsLoaded(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+    let active = true;
+    void (async () => {
+      try {
+        const rows = await readCloudRows(supabase, "projects", userId);
+        if (active) { setProjects(rows.map(mapCloudProject)); setProjectsLoaded(true); }
+      } catch (error) {
+        if (active) setMessage(`Unable to load cloud projects: ${cloudError(error)}. Refresh to retry.`);
+      }
+    })();
+    return () => { active = false; };
+  }, [supabase, userId]);
 
-  useEffect(() => {
-    if (!projectsLoaded) return;
-    try {
-      window.localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(projects));
-    } catch (error) {
-      console.error("Unable to save projects:", error);
-    }
-  }, [projects, projectsLoaded]);
+  async function runProjectMutation(action: () => Promise<void>) {
+    if (!projectsLoaded || busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
+    try { await action(); return true; }
+    catch (error) { setMessage(`Cloud save failed: ${cloudError(error)}`); return false; }
+    finally { busyRef.current = false; setBusy(false); }
+  }
+  async function updateProject(project: Project) {
+    return runProjectMutation(async () => {
+      const { data, error } = await supabase.from("projects").update({
+        title: project.title, description: project.description, status: project.status,
+        due_date: project.dueDate || null, milestones: project.milestones,
+        updated_at: project.updatedAt
+      }).eq("id", project.id).eq("user_id", userId).select("id").single();
+      if (error || !data) throw error ?? new Error("Project not found.");
+      setProjects(items => items.map(item => item.id === project.id ? project : item));
+    });
+  }
 
   const visibleProjects = useMemo(() => {
     const term = searchProjects.trim().toLowerCase();
@@ -1800,103 +2086,106 @@ function ProjectsPanel({ today }: { today: string }) {
     setFields(EMPTY_PROJECT);
   }
 
-  function saveProject(event: FormEvent<HTMLFormElement>) {
+  async function saveProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!projectsLoaded) return;
     const title = fields.title.trim();
-    if (!title) {
-      setMessage("Enter a project name.");
-      projectTitleRef.current?.focus();
-      return;
-    }
-    if (!isDateInput(fields.dueDate)) {
-      setMessage("Choose a valid project deadline.");
-      return;
-    }
+    if (!title) { setMessage("Enter a project name."); projectTitleRef.current?.focus(); return; }
+    if (!isDateInput(fields.dueDate)) { setMessage("Invalid project date."); return; }
+    const current = projects.find(item => item.id === editingProjectId);
+    if (editingProjectId && !current) return;
     const now = new Date().toISOString();
-    if (editingProjectId) {
-      setProjects((items) => items.map((project) => project.id === editingProjectId
-        ? { ...project, ...fields, title, description: fields.description.trim(), updatedAt: now }
-        : project));
-      setMessage("Project updated.");
-    } else {
-      setProjects((items) => [{
-        ...fields, title, description: fields.description.trim(), id: crypto.randomUUID(),
-        createdAt: now, updatedAt: now, milestones: [],
-      }, ...items]);
-      setMessage("Project created. Add milestones to track its progress.");
-    }
-    resetProjectEditor();
-    setSearchProjects("");
-    setStatusFilter("all");
+    const project: Project = current ? {
+      ...current, ...fields, title, description: fields.description.trim(), updatedAt: now
+    } : {
+      ...fields, id: crypto.randomUUID(), title, description: fields.description.trim(),
+      milestones: [], createdAt: now, updatedAt: now
+    };
+    let saved: boolean;
+    if (current) saved = await updateProject(project);
+    else saved = await runProjectMutation(async () => {
+      const { error } = await supabase.from("projects").insert({
+        id: project.id, user_id: userId, title: project.title,
+        description: project.description, status: project.status,
+        due_date: project.dueDate || null, milestones: [],
+        created_at: now, updated_at: now
+      });
+      if (error) throw error;
+      setProjects(items => [project, ...items]);
+    });
+    if (!saved) return;
+    setMessage(current ? "Project updated in cloud." : "Project saved in cloud.");
+    resetProjectEditor(); setSearchProjects(""); setStatusFilter("all");
   }
 
   function editProject(project: Project) {
     setEditingProjectId(project.id);
     setFields({ title: project.title, description: project.description,
       dueDate: project.dueDate, status: project.status });
-    setMessage("Editing project details. Your milestones will be preserved.");
+    setMessage("Editing project details. Milestones will be preserved.");
     window.setTimeout(() => projectTitleRef.current?.focus(), 0);
   }
 
-  function deleteProject(id: string) {
+  async function deleteProject(id: string) {
     if (!window.confirm("Delete this project and all its milestones?")) return;
-    setProjects((items) => items.filter((item) => item.id !== id));
+    const saved = await runProjectMutation(async () => {
+      const { data, error } = await supabase.from("projects").delete()
+        .eq("id", id).eq("user_id", userId).select("id").single();
+      if (error || !data) throw error ?? new Error("Project not found.");
+      setProjects(items => items.filter(item => item.id !== id));
+    });
+    if (!saved) return;
     if (editingProjectId === id) resetProjectEditor();
-    setEditingMilestoneId(null);
-    setMessage("Project deleted.");
+    setEditingMilestoneId(null); setMessage("Project deleted from cloud.");
   }
 
-  function changeStatus(id: string, status: ProjectStatus) {
-    const now = new Date().toISOString();
-    setProjects((items) => items.map((item) => item.id === id
-      ? { ...item, status, updatedAt: now } : item));
-    setMessage("Project status updated.");
+  async function changeStatus(id: string, status: ProjectStatus) {
+    const project = projects.find(item => item.id === id);
+    if (!project) return;
+    const saved = await updateProject({ ...project, status, updatedAt: new Date().toISOString() });
+    if (saved) setMessage("Project status updated in cloud.");
   }
 
-  function addMilestone(event: FormEvent<HTMLFormElement>, projectId: string) {
+  async function addMilestone(event: FormEvent<HTMLFormElement>, projectId: string) {
     event.preventDefault();
+    const project = projects.find(item => item.id === projectId);
     const title = (milestoneDrafts[projectId] || "").trim();
-    if (!title || !projectsLoaded) return;
+    if (!title || !project) return;
     const now = new Date().toISOString();
-    setProjects((items) => items.map((project) => project.id === projectId
-      ? { ...project, updatedAt: now, milestones: [...project.milestones,
-          { id: crypto.randomUUID(), title, done: false, createdAt: now }] }
-      : project));
-    setMilestoneDrafts((values) => ({ ...values, [projectId]: "" }));
-    setMessage("Milestone added.");
+    const milestone: Milestone = { id: crypto.randomUUID(), title, done: false, createdAt: now };
+    const saved = await updateProject({ ...project, updatedAt: now, milestones: [...project.milestones, milestone] });
+    if (!saved) return;
+    setMilestoneDrafts(items => ({ ...items, [projectId]: "" }));
+    setMessage("Milestone saved in cloud.");
   }
 
-  function toggleMilestone(projectId: string, milestoneId: string) {
-    const now = new Date().toISOString();
-    setProjects((items) => items.map((project) => project.id === projectId
-      ? { ...project, updatedAt: now, milestones: project.milestones.map((milestone) =>
-          milestone.id === milestoneId ? { ...milestone, done: !milestone.done } : milestone) }
-      : project));
+  async function toggleMilestone(projectId: string, milestoneId: string) {
+    const project = projects.find(item => item.id === projectId);
+    if (!project) return;
+    await updateProject({ ...project, updatedAt: new Date().toISOString(),
+      milestones: project.milestones.map(m => m.id === milestoneId ? { ...m, done: !m.done } : m) });
   }
 
-  function saveMilestone(event: FormEvent<HTMLFormElement>, projectId: string) {
+  async function saveMilestone(event: FormEvent<HTMLFormElement>, projectId: string) {
     event.preventDefault();
+    const project = projects.find(item => item.id === projectId);
     const title = milestoneTitle.trim();
-    if (!title || !editingMilestoneId) return;
-    const now = new Date().toISOString();
-    setProjects((items) => items.map((project) => project.id === projectId
-      ? { ...project, updatedAt: now, milestones: project.milestones.map((milestone) =>
-          milestone.id === editingMilestoneId ? { ...milestone, title } : milestone) }
-      : project));
-    setEditingMilestoneId(null);
-    setMilestoneTitle("");
-    setMessage("Milestone updated.");
+    if (!title || !project || !editingMilestoneId) return;
+    const saved = await updateProject({ ...project, updatedAt: new Date().toISOString(),
+      milestones: project.milestones.map(m => m.id === editingMilestoneId ? { ...m, title } : m) });
+    if (!saved) return;
+    setEditingMilestoneId(null); setMilestoneTitle("");
+    setMessage("Milestone updated in cloud.");
   }
 
-  function deleteMilestone(projectId: string, milestoneId: string) {
-    const now = new Date().toISOString();
-    setProjects((items) => items.map((project) => project.id === projectId
-      ? { ...project, updatedAt: now, milestones: project.milestones.filter((milestone) =>
-          milestone.id !== milestoneId) }
-      : project));
+  async function deleteMilestone(projectId: string, milestoneId: string) {
+    const project = projects.find(item => item.id === projectId);
+    if (!project) return;
+    const saved = await updateProject({ ...project, updatedAt: new Date().toISOString(),
+      milestones: project.milestones.filter(m => m.id !== milestoneId) });
+    if (!saved) return;
     if (editingMilestoneId === milestoneId) setEditingMilestoneId(null);
-    setMessage("Milestone removed.");
+    setMessage("Milestone removed from cloud.");
   }
 
   const activeProjects = projects.filter((item) => item.status === "active").length;
@@ -2079,7 +2368,7 @@ function ProjectsPanel({ today }: { today: string }) {
               </label>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="submit" disabled={!projectsLoaded}
+              <button type="submit" disabled={!projectsLoaded || busy}
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-neutral-100 px-4 text-sm font-semibold text-neutral-950 hover:bg-white disabled:opacity-40">
                 <Plus size={16} /> {editingProjectId ? "Save changes" : "Create project"}
               </button>
@@ -2087,7 +2376,7 @@ function ProjectsPanel({ today }: { today: string }) {
                 className="rounded-xl border border-white/20 px-4 text-sm text-neutral-200 hover:bg-white/10">Cancel edit</button>}
             </div>
             <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">
-              {message || "Projects and milestones are saved in this browser. Cloud sync is planned."}
+              {message || "Projects and milestones are saved in Supabase."}
             </p>
           </form>
         </section>
@@ -2096,7 +2385,10 @@ function ProjectsPanel({ today }: { today: string }) {
   );
 }
 
-function FinancePanel({ today }: { today: string }) {
+function FinancePanel({ today, userId }: { today: string; userId: string }) {
+  const supabase = useMemo(() => createClient(), []);
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [financeLoaded, setFinanceLoaded] = useState(false);
   const [fields, setFields] = useState<TransactionFields>(EMPTY_TRANSACTION);
@@ -2108,41 +2400,36 @@ function FinancePanel({ today }: { today: string }) {
   const [monthlyBudget, setMonthlyBudget] = useState(0);
   const [budgets, setBudgets] = useState<Record<string, number>>({});
   const titleRef = useRef<HTMLInputElement>(null);
-  const BUDGET_KEY = "dashtracker_finance_budgets_v1";
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setTransactions(restoreTransactions());
+    let active = true;
+    void (async () => {
       try {
-        const raw = window.localStorage.getItem(BUDGET_KEY);
-        const value: unknown = raw ? JSON.parse(raw) : {};
-        if (value && typeof value === "object" && !Array.isArray(value)) {
-          const clean: Record<string, number> = {};
-          for (const [key, amount] of Object.entries(value)) {
-            if (/^\d{4}-(0[1-9]|1[0-2])$/.test(key) && typeof amount === "number" &&
-                Number.isFinite(amount) && amount >= 0) clean[key] = amount;
-          }
-          setBudgets(clean);
-        }
-      } catch (error) { console.error("Unable to read finance budgets:", error); }
-      setFinanceLoaded(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+        const [rows, budgetRows] = await Promise.all([
+          readCloudRows(supabase, "finance_transactions", userId),
+          readCloudRows(supabase, "finance_budgets", userId, "month")
+        ]);
+        if (!active) return;
+        setTransactions(rows.map(mapCloudTransaction));
+        const values: Record<string, number> = {};
+        budgetRows.forEach(row => { values[String(row.month)] = cloudNumber(row.amount); });
+        setBudgets(values);
+        setFinanceLoaded(true);
+      } catch (error) {
+        if (active) setFinanceMessage(`Unable to load cloud finance: ${cloudError(error)}. Refresh to retry.`);
+      }
+    })();
+    return () => { active = false; };
+  }, [supabase, userId]);
 
-  useEffect(() => {
-    if (!financeLoaded) return;
-    try {
-      window.localStorage.setItem(FINANCE_STORAGE_KEY, JSON.stringify(transactions));
-    } catch (error) { console.error("Unable to save transactions:", error); }
-  }, [financeLoaded, transactions]);
-
-  useEffect(() => {
-    if (!financeLoaded) return;
-    try {
-      window.localStorage.setItem(BUDGET_KEY, JSON.stringify(budgets));
-    } catch (error) { console.error("Unable to save finance budgets:", error); }
-  }, [financeLoaded, budgets]);
+  async function runFinanceMutation(action: () => Promise<void>) {
+    if (!financeLoaded || busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
+    try { await action(); return true; }
+    catch (error) { setFinanceMessage(`Cloud save failed: ${cloudError(error)}`); return false; }
+    finally { busyRef.current = false; setBusy(false); }
+  }
 
   // If the user hasn't selected a month, the device's current month is shown.
   const activeMonth = selectedMonth || (today ? today.slice(0, 7) : "");
@@ -2174,32 +2461,48 @@ function FinancePanel({ today }: { today: string }) {
     setFields({ ...EMPTY_TRANSACTION, date: today });
   }
 
-  function saveTransaction(event: FormEvent<HTMLFormElement>) {
+  async function saveTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!financeLoaded) return;
     const title = fields.title.trim();
     const date = fields.date || today;
     const amount = Math.round(fields.amount * 100) / 100;
     if (!title || !Number.isFinite(amount) || amount <= 0 || amount > 1000000000 ||
-      !date || !isDateInput(date) ||
-      !financeCategories(fields.type).includes(fields.category)) {
-      setFinanceMessage("Enter a title, valid positive amount, category and date.");
-      return;
+      !date || !isDateInput(date) || !financeCategories(fields.type).includes(fields.category)) {
+      setFinanceMessage("Enter a title, valid positive amount, category and date."); return;
     }
+    const current = transactions.find(item => item.id === editingTransactionId);
+    if (editingTransactionId && !current) return;
     const now = new Date().toISOString();
-    if (editingTransactionId) {
-      setTransactions((items) => items.map((item) => item.id === editingTransactionId
-        ? { ...item, ...fields, title, amount, date, notes: fields.notes.trim() } : item));
-      setFinanceMessage("Transaction updated.");
-    } else {
-      setTransactions((items) => [{ ...fields, title, amount, date,
-        notes: fields.notes.trim(), id: crypto.randomUUID(), createdAt: now }, ...items]);
-      setFinanceMessage("Transaction added.");
-    }
+    const transaction: Transaction = current ? {
+      ...current, ...fields, title, amount, date, notes: fields.notes.trim()
+    } : {
+      ...fields, title, amount, date, notes: fields.notes.trim(),
+      id: crypto.randomUUID(), createdAt: now
+    };
+    const saved = await runFinanceMutation(async () => {
+      const record = {
+        title: transaction.title, amount: transaction.amount, type: transaction.type,
+        category: transaction.category, transaction_date: transaction.date,
+        notes: transaction.notes
+      };
+      if (current) {
+        const { data, error } = await supabase.from("finance_transactions")
+          .update(record).eq("id", transaction.id).eq("user_id", userId).select("id").single();
+        if (error || !data) throw error ?? new Error("Transaction not found.");
+        setTransactions(items => items.map(item => item.id === transaction.id ? transaction : item));
+      } else {
+        const { error } = await supabase.from("finance_transactions").insert({
+          ...record, id: transaction.id, user_id: userId, created_at: now
+        });
+        if (error) throw error;
+        setTransactions(items => [transaction, ...items]);
+      }
+    });
+    if (!saved) return;
+    setFinanceMessage(current ? "Transaction updated in cloud." : "Transaction saved in cloud.");
     setSelectedMonth(date.slice(0, 7));
-    setMonthlyBudget(0);
-    setSearchTransactions("");
-    setTypeFilter("all");
+    setMonthlyBudget(0); setSearchTransactions(""); setTypeFilter("all");
     resetEditor();
   }
 
@@ -2211,11 +2514,33 @@ function FinancePanel({ today }: { today: string }) {
     window.setTimeout(() => titleRef.current?.focus(), 0);
   }
 
-  function deleteTransaction(item: Transaction) {
+  async function deleteTransaction(item: Transaction) {
     if (!window.confirm(`Delete the transaction "${item.title}"?`)) return;
-    setTransactions((items) => items.filter((entry) => entry.id !== item.id));
+    const saved = await runFinanceMutation(async () => {
+      const { data, error } = await supabase.from("finance_transactions")
+        .delete().eq("id", item.id).eq("user_id", userId).select("id").single();
+      if (error || !data) throw error ?? new Error("Transaction not found.");
+      setTransactions(items => items.filter(entry => entry.id !== item.id));
+    });
+    if (!saved) return;
     if (editingTransactionId === item.id) resetEditor();
-    setFinanceMessage("Transaction deleted.");
+    setFinanceMessage("Transaction deleted from cloud.");
+  }
+
+  async function saveBudget(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeMonth || !Number.isFinite(monthlyBudget) || monthlyBudget < 0 || monthlyBudget > 1000000000) {
+      setFinanceMessage("Enter a valid monthly budget."); return;
+    }
+    const amount = Math.round(monthlyBudget * 100) / 100;
+    const saved = await runFinanceMutation(async () => {
+      const { error } = await supabase.from("finance_budgets").upsert({
+        user_id: userId, month: activeMonth, amount
+      }, { onConflict: "user_id,month" });
+      if (error) throw error;
+      setBudgets(items => ({ ...items, [activeMonth]: amount }));
+    });
+    if (saved) { setMonthlyBudget(0); setFinanceMessage("Budget saved in cloud."); }
   }
 
   function exportTransactions() {
@@ -2378,30 +2703,26 @@ function FinancePanel({ today }: { today: string }) {
                   placeholder="Additional details..." className={`${fieldClass} mt-1 resize-y py-3`}/>
               </label>
               <div className="flex flex-wrap gap-2">
-                <button type="submit" disabled={!financeLoaded}
+                <button type="submit" disabled={!financeLoaded || busy}
                   className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-neutral-100 px-4 text-sm font-semibold text-neutral-950 hover:bg-white disabled:opacity-40">
                   <Plus size={16}/>{editingTransactionId ? "Save changes" : "Add transaction"}
                 </button>
                 {editingTransactionId && <button type="button" onClick={() => { resetEditor(); setFinanceMessage(""); }}
                   className="rounded-xl border border-white/20 px-4 text-sm hover:bg-white/10">Cancel edit</button>}
               </div>
-              <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">{financeMessage || "Finance records are saved in this browser only."}</p>
+              <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">{financeMessage || "Finance records are saved in Supabase."}</p>
             </form>
           </section>
           <section className={`${cardClass} p-5 sm:p-6`} aria-label="Monthly expense budget">
             <div className="mb-2 flex items-center gap-2"><Target size={19}/><h3 className="text-lg font-semibold">Monthly spending budget</h3></div>
             <p className="text-xs text-neutral-500">Set a spending limit for {activeMonth || "this month"}.</p>
-            <form onSubmit={(event) => { event.preventDefault(); if (!activeMonth) return;
-              if (Number.isFinite(monthlyBudget) && monthlyBudget >= 0 && monthlyBudget <= 1000000000) {
-                setBudgets((items) => ({...items, [activeMonth]: Math.round(monthlyBudget * 100) / 100}));
-                setFinanceMessage("Monthly budget saved.");
-              } }} className="mt-4 flex flex-wrap gap-2">
+            <form onSubmit={saveBudget} className="mt-4 flex flex-wrap gap-2">
               <label className="min-w-0 flex-1"><span className="sr-only">Monthly budget in rupees</span>
                 <input type="number" min="0" max="1000000000" step="0.01" placeholder={activeBudget ? String(activeBudget) : "Budget (₹)"}
                   value={monthlyBudget || ""} onChange={(event) => setMonthlyBudget(Number(event.target.value))}
                   className={fieldClass}/>
               </label>
-              <button type="submit" disabled={!financeLoaded || !activeMonth}
+              <button type="submit" disabled={!financeLoaded || !activeMonth || busy}
                 className="rounded-xl border border-white/20 px-4 text-sm hover:bg-white/10 disabled:opacity-40">Save</button>
             </form>
             <p className={`mt-4 ${moneyClass}`}>{activeBudget ? formatINR(monthlyExpenses) + " / " + formatINR(activeBudget) : "No budget set"}</p>
