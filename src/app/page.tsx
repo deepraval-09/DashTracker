@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
   Activity,
+  Circle,
+  Compass,
+  Bell,
+  GitCommitHorizontal,
+  Cloud,
+  Database,
+  Settings2,
+  Sparkles,
+  Zap,
   ArrowDownUp,
   ArrowRight,
   CalendarDays,
@@ -26,8 +35,6 @@ import {
   LogOut,
   ShieldCheck,
   UserRound,
-  Menu,
-  MoreHorizontal,
   Pin,
   PinOff,
   StickyNote,
@@ -157,8 +164,40 @@ type SortMode = "newest" | "oldest" | "due" | "priority";
 type TaskFields = Pick<Task, "title" | "priority" | "dueDate" | "category">;
 
 const APP_NAME = "DashTracker";
-const APP_TAGLINE = "PERSONAL LIFE OS";
-const BrandIcon = Activity;
+
+type VisualTheme = "inferno" | "obsidian" | "neon" | "aurora" | "ocean" | "sakura" | "comic" | "ember";
+
+type ThemeDefinition = {
+  id: VisualTheme;
+  name: string;
+  description: string;
+  accent: string;
+  secondary: string;
+  bg: string;
+  surface: string;
+  raised: string;
+  field: string;
+  hero: string;
+  glow: string;
+  preview: string;
+  art: "none" | "grid" | "aurora" | "waves" | "landscape" | "pop" | "embers";
+};
+
+const VISUAL_THEMES: ThemeDefinition[] = [
+  { id: "inferno", name: "Inferno", description: "Carbon & electric vermilion", accent: "#FF4F2C", secondary: "#FF8C55", bg: "#090A0D", surface: "#17191E", raised: "#22252B", field: "#111318", hero: "#202127", glow: "rgba(255,68,38,.28)", preview: "linear-gradient(135deg,#090A0D 20%,#36363C 55%,#FF4F2C 100%)", art: "embers" },
+  { id: "obsidian", name: "Obsidian", description: "Minimal monochrome", accent: "#E5E7EB", secondary: "#A3A3A3", bg: "#0B0C0F", surface: "#191A1F", raised: "#22242B", field: "#14151A", hero: "#202127", glow: "rgba(255,255,255,.07)", preview: "linear-gradient(135deg,#0B0C0F 20%,#444650 70%,#EEEFF1)", art: "none" },
+  { id: "neon", name: "Neon City", description: "Electric cyberpunk", accent: "#F47BFF", secondary: "#54F7EA", bg: "#090718", surface: "#19132C", raised: "#241A3A", field: "#110D21", hero: "#241337", glow: "rgba(217,80,255,.26)", preview: "linear-gradient(135deg,#110824,#FF56D5 48%,#56F5E9)", art: "grid" },
+  { id: "aurora", name: "Aurora", description: "Soft luminous skies", accent: "#B7A2FF", secondary: "#66E7CE", bg: "#0A0C1A", surface: "#1A1B31", raised: "#252440", field: "#111426", hero: "#23213D", glow: "rgba(144,110,255,.25)", preview: "linear-gradient(130deg,#101533,#8B78F8 55%,#6DE3CB)", art: "aurora" },
+  { id: "ocean", name: "Deep Ocean", description: "Electric blue currents", accent: "#56D9FF", secondary: "#518AFF", bg: "#07121C", surface: "#132333", raised: "#1B3044", field: "#0C1B29", hero: "#18334B", glow: "rgba(53,168,255,.23)", preview: "linear-gradient(135deg,#081626,#126D9B 60%,#68E9FF)", art: "waves" },
+  { id: "sakura", name: "Sakura Dream", description: "Illustrated nightscape", accent: "#FFB2D0", secondary: "#D6B0FF", bg: "#170F25", surface: "#2A1C34", raised: "#392540", field: "#201629", hero: "#43253E", glow: "rgba(255,139,188,.20)", preview: "linear-gradient(145deg,#281738,#B974B6 60%,#FFB8D1)", art: "landscape" },
+  { id: "comic", name: "Comic Pop", description: "Playful illustrated art", accent: "#FFE16A", secondary: "#FF77AD", bg: "#17132B", surface: "#292441", raised: "#373052", field: "#211B36", hero: "#33304F", glow: "rgba(255,220,103,.16)", preview: "linear-gradient(120deg,#292345 15%,#FF73AE 50%,#FFE66E 80%)", art: "pop" },
+  { id: "ember", name: "Ember", description: "Warm dark glow", accent: "#FFA76C", secondary: "#FF698D", bg: "#110D12", surface: "#22191E", raised: "#302029", field: "#191217", hero: "#352129", glow: "rgba(255,114,87,.24)", preview: "linear-gradient(135deg,#1D1017,#E86B52 52%,#FFB06A)", art: "embers" },
+];
+
+function isVisualTheme(value: unknown): value is VisualTheme {
+  return VISUAL_THEMES.some(theme => theme.id === value);
+}
+
 
 const PRIORITIES: Priority[] = ["low", "medium", "high"];
 const CATEGORIES: TaskCategory[] = ["Personal", "Study", "Work", "Health", "Other"];
@@ -172,12 +211,12 @@ const navigation: { id: Section; label: string; icon: LucideIcon }[] = [
   { id: "projects", label: "Projects", icon: Target },
   { id: "finance", label: "Finances", icon: Wallet },
   { id: "notes", label: "Notes", icon: Command },
-  { id: "settings", label: "Settings", icon: MoreHorizontal },
+  { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
-const cardClass = "rounded-2xl border border-white/10 bg-[#171717]";
+const cardClass = "rounded-[26px] border border-white/[0.09] bg-[var(--dt-surface)]";
 const fieldClass =
-  "min-h-11 w-full min-w-0 rounded-xl border border-white/15 bg-[#0c0c0c] px-3 text-sm text-neutral-100 outline-none focus:border-neutral-400 focus-visible:ring-2 focus-visible:ring-white/10";
+  "min-h-12 w-full min-w-0 rounded-xl border border-white/15 bg-[var(--dt-field)] px-3 text-base text-neutral-100 outline-none focus:border-neutral-400 focus-visible:ring-2 focus-visible:ring-white/10 sm:text-sm";
 
 function isPriority(value: unknown): value is Priority {
   return typeof value === "string" && PRIORITIES.includes(value as Priority);
@@ -418,7 +457,7 @@ export default function ProtectedHome() {
         setAuthStatus("authenticated");
       } catch {
         if (alive) {
-          setAuthError("Could not contact Supabase. Please check your connection and retry.");
+          setAuthError("Could not connect. Please try again.");
           setAuthStatus("error");
         }
       }
@@ -460,7 +499,7 @@ export default function ProtectedHome() {
   if (authStatus !== "authenticated" || !user) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#090909] px-4 text-neutral-100">
-        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#171717] p-8 text-center">
+        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[var(--dt-surface)] p-8 text-center">
           <ShieldCheck size={34} className="mx-auto mb-4 text-neutral-200" aria-hidden="true" />
           <h1 className="text-xl font-semibold">DashTracker</h1>
           {authStatus === "error" ? (
@@ -511,6 +550,30 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
   const [categoryFilter, setCategoryFilter] = useState<"all" | TaskCategory>("all");
   const [section, setSection] = useState<Section>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddTitle, setQuickAddTitle] = useState("");
+  const [quickAddPriority, setQuickAddPriority] = useState<Priority>("medium");
+  const [quickAddDate, setQuickAddDate] = useState("");
+  const [quickAddError, setQuickAddError] = useState("");
+  const [compactMode, setCompactMode] = useState(false);
+  const [visualTheme, setVisualTheme] = useState<VisualTheme>("inferno");
+  const [featureSlide, setFeatureSlide] = useState(0);
+  // Swipe horizontally between the three featured widgets; vertical page scrolling remains native.
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const mouseSwipeStart = useRef<{ x: number; y: number } | null>(null);
+  function completeFeatureSwipe(start: { x: number; y: number } | null, x: number, y: number) {
+    if (!start) return;
+    const dx = x - start.x;
+    const dy = y - start.y;
+    if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+      setFeatureSlide(current => Math.max(0, Math.min(2, current + (dx < 0 ? 1 : -1))));
+    }
+  }
+  const selectedTheme = VISUAL_THEMES.find(theme => theme.id === visualTheme) ?? VISUAL_THEMES[0];
+  const [showFinishedToday, setShowFinishedToday] = useState(true);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMessage, setBackupMessage] = useState("");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingFields, setEditingFields] = useState<TaskFields>(emptyFields);
@@ -534,6 +597,43 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
   const [habitMessage, setHabitMessage] = useState("");
   const [habitBusy, setHabitBusy] = useState(false);
   const habitBusyRef = useRef(false);
+
+  // Device-only display preferences. Keep them isolated by Supabase account.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(`dashtracker-mobile-preferences:${accountUserId}`);
+      if (stored) {
+        const preferences = JSON.parse(stored) as Record<string, unknown>;
+        setCompactMode(preferences.compactMode === true);
+        // Adopt the new Inferno look once; users can then select any theme freely.
+        if (preferences.designVersion === 2 && isVisualTheme(preferences.visualTheme)) {
+          setVisualTheme(preferences.visualTheme);
+        } else {
+          setVisualTheme("inferno");
+        }
+        if (typeof preferences.showFinishedToday === "boolean") setShowFinishedToday(preferences.showFinishedToday);
+        if (isPriority(preferences.defaultPriority)) setQuickAddPriority(preferences.defaultPriority);
+      }
+    } catch { /* Storage may be unavailable in private browsing. */ }
+    setSettingsLoaded(true);
+  }, [accountUserId]);
+
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    try {
+      window.localStorage.setItem(`dashtracker-mobile-preferences:${accountUserId}`,
+        JSON.stringify({ compactMode, showFinishedToday, defaultPriority: quickAddPriority, visualTheme, designVersion: 2 }));
+    } catch { /* Preferences are optional; cloud data remains unaffected. */ }
+  }, [accountUserId, settingsLoaded, compactMode, showFinishedToday, quickAddPriority, visualTheme]);
+
+  useEffect(() => {
+    if (!quickAddOpen && !mobileMenuOpen) return;
+    function onEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") { setQuickAddOpen(false); setMobileMenuOpen(false); }
+    }
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [quickAddOpen, mobileMenuOpen]);
 
   useEffect(() => {
     const update = () => setCurrentDate(new Date());
@@ -577,7 +677,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
     eventBusyRef.current = true;
     setEventBusy(true);
     try { await action(); return true; }
-    catch (error) { setEventMessage(`Cloud save failed: ${cloudError(error)}`); return false; }
+    catch (error) { setEventMessage(`Save failed: ${cloudError(error)}`); return false; }
     finally { eventBusyRef.current = false; setEventBusy(false); }
   }
 
@@ -586,7 +686,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
     habitBusyRef.current = true;
     setHabitBusy(true);
     try { await action(); return true; }
-    catch (error) { setHabitMessage(`Cloud save failed: ${cloudError(error)}`); return false; }
+    catch (error) { setHabitMessage(`Save failed: ${cloudError(error)}`); return false; }
     finally { habitBusyRef.current = false; setHabitBusy(false); }
   }
 
@@ -614,7 +714,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
       await operation();
       return true;
     } catch (error) {
-      setTaskMessage(`Cloud save failed: ${taskErrorText(error)}. No change was applied locally.`);
+      setTaskMessage(`Save failed: ${taskErrorText(error)}. No change was applied locally.`);
       return false;
     } finally {
       taskBusyRef.current = false;
@@ -650,7 +750,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
       }
     });
     if (!saved) return;
-    setHabitMessage(current ? "Habit updated in cloud." : "Habit created in cloud.");
+    setHabitMessage(current ? "Habit updated." : "Habit created.");
     setEditingHabitId(null);
     setHabitFields(emptyHabit);
   }
@@ -680,7 +780,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
     });
     if (saved) {
       if (editingHabitId === id) { setEditingHabitId(null); setHabitFields(emptyHabit); }
-      setHabitMessage("Habit deleted from cloud.");
+      setHabitMessage("Habit deleted.");
     }
   }
 
@@ -715,7 +815,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
       }
     });
     if (!saved) return;
-    setHabitMessage(current ? "Goal updated in cloud." : "Goal created in cloud.");
+    setHabitMessage(current ? "Goal updated." : "Goal created.");
     setGoalFields(emptyGoal);
     setEditingGoalId(null);
   }
@@ -742,7 +842,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
     });
     if (saved) {
       if (editingGoalId === id) { setEditingGoalId(null); setGoalFields(emptyGoal); }
-      setHabitMessage("Goal deleted from cloud.");
+      setHabitMessage("Goal deleted.");
     }
   }
 
@@ -791,7 +891,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
       }
     });
     if (!saved) return;
-    setEventMessage(current ? "Event updated in cloud." : "Event saved in cloud.");
+    setEventMessage(current ? "Event updated." : "Event saved.");
     setSelectedDate(date);
     setViewMonth(date.slice(0, 7));
     setEditingEventId(null);
@@ -819,17 +919,12 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
     });
     if (!saved) return;
     if (editingEventId === id) cancelCalendarEdit();
-    setEventMessage("Event deleted from cloud.");
+    setEventMessage("Event deleted.");
   }
 
   const today = currentDate ? localDateKey(currentDate) : "";
   const completedCount = tasks.filter((task) => task.completed).length;
   const pendingCount = tasks.length - completedCount;
-  const progress = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
-  const dueTodayCount = today
-    ? tasks.filter((task) => !task.completed && task.dueDate === today).length : 0;
-  const overdueCount = today
-    ? tasks.filter((task) => !task.completed && task.dueDate && task.dueDate < today).length : 0;
 
   const visibleTasks = useMemo(() => {
     const result = tasks.filter((task) => {
@@ -854,7 +949,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
 
   async function addTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!loaded) { setTaskMessage("Cloud tasks are loading. Please try again."); return; }
+    if (!loaded) { setTaskMessage("Tasks are loading."); return; }
     const title = newTask.title.trim();
     if (!title) {
       setTaskMessage("Enter a task title first.");
@@ -885,8 +980,61 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
     setCategoryFilter("all");
     setSearch("");
     setSortMode("newest");
-    setTaskMessage("Task saved to Supabase.");
+    setTaskMessage("Task added");
     taskInputRef.current?.focus();
+  }
+
+  async function addQuickTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!loaded) { setQuickAddError("Just a moment…"); return; }
+    const title = quickAddTitle.trim();
+    if (!title) { setQuickAddError("Enter a task first."); return; }
+    if (!isDateInput(quickAddDate)) { setQuickAddError("Choose a valid date."); return; }
+    const task: Task = {
+      id: crypto.randomUUID(), title, completed: false,
+      priority: quickAddPriority, dueDate: quickAddDate,
+      category: "Personal", createdAt: new Date().toISOString(),
+    };
+    const saved = await runTaskMutation(async () => {
+      const { error } = await supabase.from("tasks").insert({
+        id: task.id, user_id: accountUserId, title: task.title,
+        completed: false, priority: task.priority,
+        due_date: task.dueDate || null, category: task.category,
+        created_at: task.createdAt,
+      });
+      if (error) throw error;
+      setTasks(items => [task, ...items]);
+    });
+    if (saved) {
+      setQuickAddTitle(""); setQuickAddDate(""); setQuickAddError("");
+      setQuickAddOpen(false);
+      setTaskMessage("Task added");
+    } else {
+      setQuickAddError("Could not save. Check your connection and retry.");
+    }
+  }
+
+  async function exportAllData() {
+    if (backupBusy) return;
+    setBackupBusy(true); setBackupMessage("");
+    try {
+      const tables = ["tasks", "calendar_events", "habits", "goals", "notes", "projects", "finance_transactions", "finance_budgets"];
+      const snapshots = await Promise.all(tables.map(table =>
+        readCloudRows(supabase, table, accountUserId, table === "finance_budgets" ? "month" : "created_at")
+      ));
+      const data = Object.fromEntries(tables.map((table, index) => [table, snapshots[index]]));
+      const file = new Blob([JSON.stringify({
+        app: "DashTracker", exportedAt: new Date().toISOString(), version: 1, data,
+      }, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url; link.download = `dashtracker-backup-${localDateKey(new Date())}.json`;
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setBackupMessage("Backup downloaded. Store it somewhere private — it contains personal data.");
+    } catch (error) {
+      setBackupMessage(`Backup failed: ${cloudError(error)}`);
+    } finally { setBackupBusy(false); }
   }
 
   async function toggleTask(id: string) {
@@ -913,7 +1061,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
     });
     if (!saved) return;
     if (editingId === id) cancelEdit();
-    setTaskMessage("Task deleted from Supabase.");
+    setTaskMessage("Task deleted");
   }
 
   function beginEdit(task: Task) {
@@ -944,7 +1092,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
     });
     if (!saved) return;
     cancelEdit();
-    setTaskMessage("Task updated in Supabase.");
+    setTaskMessage("Task updated");
   }
 
   function navigate(nextSection: Section) {
@@ -954,31 +1102,136 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
     setSearch("");
     setFilter("all");
     setCategoryFilter("all");
+    if (nextSection === "tasks") setSortMode("newest");
   }
 
   const activeSection = navigation.find((item) => item.id === section);
-  const showingTasks = section === "dashboard" || section === "tasks";
+  const showingTasks = section === "tasks";
+  // The home overview and the progress ring use the very same task collection.
+  // Tasks do not need a due date to count; every successful CRUD operation updates
+  // `tasks`, so the UI recalculates immediately without a reload.
+  const newestFirst = (a: Task, b: Task) =>
+    b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id);
+  // The first row is always the most recently created visible task.
+  const focusTasks = tasks.filter(item => showFinishedToday || !item.completed).sort(newestFirst);
+  const totalTaskCount = tasks.length;
+  const totalCompletedCount = completedCount;
+  const overallProgress = totalTaskCount
+    ? Math.round((totalCompletedCount / totalTaskCount) * 100) : 0;
+  const todayEvents = events.filter(item => item.date === today)
+    .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+  const todayHabitCount = habits.filter(item => today && item.checkIns.includes(today)).length;
+  const mostConsistent = habits.length && today
+    ? Math.max(...habits.map(habit => habitStreak(habit, today))) : 0;
 
   return (
-    <div className="min-h-screen bg-[#090909] font-sans text-neutral-100">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col overflow-y-auto overscroll-contain border-r border-white/10 bg-[#101010] lg:flex">
+    <div
+      className="relative min-h-screen overflow-x-hidden bg-[var(--dt-bg)] font-sans text-neutral-100 selection:bg-[var(--accent)] selection:text-[var(--dt-on-accent)] transition-colors duration-500"
+      data-visual-theme={visualTheme}
+      style={{
+        "--accent": selectedTheme.accent,
+        "--accent-2": selectedTheme.secondary,
+        "--accent-glow": selectedTheme.glow,
+        "--dt-bg": selectedTheme.bg,
+        "--dt-surface": selectedTheme.surface,
+        "--dt-raised": selectedTheme.raised,
+        "--dt-field": selectedTheme.field,
+        "--dt-hero": selectedTheme.hero,
+        "--dt-sidebar": selectedTheme.surface,
+        "--dt-header": selectedTheme.bg,
+        "--dt-nav": selectedTheme.surface,
+        "--dt-on-accent": "#101018",
+      } as CSSProperties}
+    >
+      <style>{`@keyframes dtRise {from {opacity:0;transform:translateY(14px)} to {opacity:1;transform:translateY(0)}}
+        @keyframes dtAuroraDrift {0%,100%{transform:translate3d(-2%,0,0) rotate(-8deg)}50%{transform:translate3d(5%,4%,0) rotate(5deg)}}
+        .dt-aurora-one{background:linear-gradient(110deg,#775cff,#3eebd0,#bd66ff);animation:dtAuroraDrift 14s ease-in-out infinite}
+        .dt-aurora-two{background:linear-gradient(105deg,#4b91ff,#9f5ffe,#59ebcb);animation:dtAuroraDrift 19s ease-in-out infinite reverse}
+        .dt-stars{background-image:radial-gradient(circle,#fff 1px,transparent 1.5px);background-size:85px 110px}
+        .dt-grid-art{background-image:linear-gradient(#F47BFF55 1px,transparent 1px),linear-gradient(90deg,#54F7EA44 1px,transparent 1px);background-size:65px 65px;transform:perspective(400px) rotateX(55deg);transform-origin:bottom center}
+        .dt-comic-dots{background-image:radial-gradient(circle,#FFE16A 2px,transparent 2px);background-size:25px 25px}
+        .dt-embers{background-image:radial-gradient(circle,#FFA76C 2px,transparent 3px),radial-gradient(circle,#FF698D 1px,transparent 3px);background-size:138px 135px,92px 155px}
+        [data-visual-theme="neon"] .dt-feature-card{box-shadow:0 15px 65px -35px var(--accent-glow)}
+        [data-visual-theme="comic"] .dt-feature-card{border-width:2px;border-color:#FFE16A22}
+        [data-visual-theme="sakura"] .dt-feature-card{background-color:rgba(42,28,52,.9)}
+        .dt-enter{animation:dtRise .5s cubic-bezier(.2,.8,.2,1) both}
+        .dt-interact{transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+        .dt-interact:active{transform:scale(.975)}
+        @media(hover:hover){.dt-interact:hover{transform:translateY(-1px)}}
+        @media(prefers-reduced-motion:reduce){.dt-enter,.dt-aurora-one,.dt-aurora-two{animation:none!important}.dt-interact{transition:none!important}}
+        @keyframes dtInfernoPulse {0%,100%{opacity:.45;transform:scale(.97)}50%{opacity:.75;transform:scale(1.04)}}
+        @keyframes dtShimmer {0%{background-position:200% 0}100%{background-position:-200% 0}}
+        [data-visual-theme="inferno"] .dt-inferno-outline{border-color:rgba(255,79,44,.42)}
+        .dt-glass-card{background:linear-gradient(145deg,rgba(60,61,67,.78) 0%,rgba(27,29,34,.97) 44%,rgba(31,32,38,.96) 100%);border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 17px 45px -25px rgba(0,0,0,.9)}
+        .dt-hero-shine{background:linear-gradient(115deg,rgba(255,255,255,.12) 0%,rgba(255,255,255,.025) 30%,transparent 52%);pointer-events:none}
+        .dt-micro-progress{background:linear-gradient(90deg,var(--accent),var(--accent-2));box-shadow:0 0 16px var(--accent-glow)}
+        .dt-dock{background:linear-gradient(180deg,rgba(45,46,53,.94),rgba(20,21,26,.97));border:1px solid rgba(255,255,255,.16);box-shadow:0 18px 55px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.10)}
+        .dt-dashboard-card{transition:transform .24s cubic-bezier(.2,.8,.2,1),border-color .24s,box-shadow .24s}
+        @media(hover:hover){.dt-dashboard-card:hover{transform:translateY(-4px);border-color:rgba(255,104,73,.52);box-shadow:0 18px 50px -27px var(--accent-glow)}}
+        .dt-dashboard-card:active{transform:scale(.985);border-color:var(--accent)}
+        .dt-feature-swipe{animation:dtFeatureEnter .24s ease-out both}
+        @keyframes dtFeatureEnter{from{opacity:.45;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+        @media(hover:none){.dt-dashboard-card:focus-visible,.dt-task-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}.dt-task-row:active{background:rgba(255,255,255,.09)!important;transform:scale(.985)}.dt-metric-press:active{transform:scale(.96);box-shadow:0 0 20px var(--accent-glow)}}
+        .dt-touch{touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:transform .16s ease,background-color .16s ease,color .16s ease,box-shadow .16s ease}
+        .dt-touch:active{transform:scale(.90);background-color:rgba(255,255,255,.10)}
+        .dt-touch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+        @media(hover:none){.dt-dashboard-card:active{transform:scale(.98);background-color:rgba(255,255,255,.045)}.dt-interact:active{transform:scale(.96)} }
+
+        @media(prefers-reduced-motion:reduce){.dt-dashboard-card{transition:none!important}.dt-feature-swipe{animation:none!important}}
+      `}</style>
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
+        {selectedTheme.art === "grid" && <>
+          <div className="absolute inset-0 opacity-60" style={{background:"radial-gradient(ellipse at 76% 18%,rgba(232,57,255,.26),transparent 49%),radial-gradient(ellipse at 22% 76%,rgba(50,245,230,.14),transparent 46%)"}} />
+          <div className="dt-grid-art absolute -bottom-24 left-[-10%] h-[65%] w-[120%] opacity-35" />
+          <div className="absolute right-[10%] top-[15%] h-36 w-36 rounded-full border-2 border-[#ff77ee]/40 shadow-[0_0_70px_rgba(235,70,240,.3)] sm:h-60 sm:w-60" />
+        </>}
+        {selectedTheme.art === "aurora" && <>
+          <div className="dt-aurora-one absolute -left-[20%] top-[5%] h-[40%] w-[125%] rounded-[50%] opacity-45 blur-[65px]" />
+          <div className="dt-aurora-two absolute right-[-40%] top-[30%] h-[45%] w-[110%] rounded-[50%] opacity-30 blur-[75px]" />
+          <div className="dt-stars absolute inset-0 opacity-50" />
+        </>}
+        {selectedTheme.art === "waves" && <>
+          <div className="absolute inset-0" style={{background:"radial-gradient(ellipse at 75% 20%,rgba(17,185,234,.15),transparent 55%)"}}/>
+          <svg viewBox="0 0 800 1100" preserveAspectRatio="xMidYMax slice" className="absolute right-[-20%] bottom-[-6%] h-[100%] w-[120%] opacity-30" fill="none" stroke="#4ECFFF" strokeWidth="2">
+            <path d="M-120 600 Q80 430 280 615 T700 600 T1100 590"/><path d="M-120 660 Q80 490 280 675 T700 660 T1100 650"/><path d="M-120 720 Q80 550 280 735 T700 720 T1100 710"/><path d="M-120 780 Q80 610 280 795 T700 780 T1100 770"/><path d="M-120 840 Q80 670 280 855 T700 840 T1100 830"/>
+          </svg>
+        </>}
+        {selectedTheme.art === "landscape" && <>
+          <div className="absolute inset-0" style={{background:"linear-gradient(180deg,rgba(111,62,143,.23),transparent 70%)"}}/>
+          <svg viewBox="0 0 900 1100" preserveAspectRatio="xMidYMax slice" className="absolute bottom-0 right-0 h-full w-full opacity-60" aria-hidden="true">
+            <circle cx="715" cy="250" r="116" fill="#FFB1CA" opacity=".18"/><circle cx="715" cy="250" r="80" fill="#FFD0DE" opacity=".45"/>
+            <path d="M0 790 215 540 395 770 575 480 900 785V1100H0Z" fill="#815B9C" opacity=".4"/><path d="M0 930 250 720 430 860 700 660 900 850V1100H0Z" fill="#4C3A69" opacity=".65"/>
+            <path d="M0 1040 Q210 850 430 1020 T900 940V1100H0Z" fill="#2C2448"/>
+            <path d="M85 170q90 45 180 0M120 190q100 38 210 0" fill="none" stroke="#FFC6DC" strokeWidth="3" opacity=".36"/>
+            {Array.from({length:17},(_,i)=><g key={i} transform={`translate(${(i*173+44)%870} ${(i*239+95)%1020}) rotate(${i*43})`} opacity=".45"><ellipse cx="0" cy="-9" rx="5" ry="11" fill="#FFB5D4"/><ellipse cx="0" cy="9" rx="5" ry="11" fill="#FFB5D4"/><ellipse cx="-9" cy="0" rx="11" ry="5" fill="#FFD8E5"/><ellipse cx="9" cy="0" rx="11" ry="5" fill="#FFD8E5"/></g>)}
+          </svg>
+        </>}
+        {selectedTheme.art === "pop" && <>
+          <div className="dt-comic-dots absolute inset-0 opacity-20"/>
+          <svg viewBox="0 0 800 1000" preserveAspectRatio="xMidYMax slice" className="absolute inset-0 h-full w-full opacity-35" aria-hidden="true">
+            <path d="m620 80 40 75 85-8-48 70 45 70-88-15-50 76-10-92-90-20 81-44Z" fill="#FF78A8" stroke="#FFE777" strokeWidth="6"/>
+            <circle cx="130" cy="390" r="100" fill="#6BC9FF" stroke="#141024" strokeWidth="13"/><circle cx="130" cy="390" r="57" fill="#FFE873"/>
+            <path d="m470 630 35 50 60-15-22 58 40 48-65-5-38 50-5-64-60-22 53-37Z" fill="#FFE16A" stroke="#1B1630" strokeWidth="10"/>
+            <path d="M55 900 230 740M65 940 290 745M620 920 780 760" stroke="#FC82B7" strokeWidth="17" strokeLinecap="round" />
+          </svg>
+        </>}
+        {selectedTheme.art === "embers" && <>
+          <div className="absolute inset-0" style={{background:"radial-gradient(ellipse at 76% 24%,rgba(255,104,94,.17),transparent 50%),radial-gradient(ellipse at 15% 85%,rgba(255,188,105,.12),transparent 45%)"}}/>
+          <div className="dt-embers absolute inset-0 opacity-50"/>
+        </>}
+      </div>
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col overflow-y-auto overscroll-contain border-r border-white/10 bg-[var(--dt-sidebar)]/95 lg:flex">
         <div className="flex h-20 items-center gap-3 px-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 text-neutral-950">
-            <BrandIcon size={23} />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight">{APP_NAME}</h1>
-            <p className="text-[11px] tracking-wider text-neutral-500">{APP_TAGLINE}</p>
-          </div>
+          <h1 className="text-[22px] font-extrabold tracking-[-.06em] text-white">{APP_NAME}</h1>
         </div>
         <div className="px-4 pt-5">
-          <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Workspace</p>
+          <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">YOUR SPACE</p>
           <nav aria-label="Desktop navigation" className="space-y-1">
             {navigation.map(({ id, label, icon: Icon }) => (
               <button key={id} type="button" onClick={() => navigate(id)}
                 aria-current={section === id ? "page" : undefined}
                 className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm transition ${
-                  section === id ? "bg-white/10 font-semibold text-white" : "text-neutral-400 hover:bg-white/5 hover:text-white"
+                  section === id ? "border-l-2 border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]" : "text-neutral-400 hover:bg-white/5 hover:text-white"
                 }`}>
                 <Icon size={18} />{label}
               </button>
@@ -986,10 +1239,6 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
           </nav>
         </div>
         <div className="mt-auto p-4">
-          <div className="rounded-2xl border border-white/15 bg-white/5 p-4">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><Target size={16} />Your workspace</div>
-            <p className="text-xs leading-5 text-neutral-400">Track your day, stay organized, and build better habits.</p>
-          </div>
           <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
             <div className="mb-1 flex items-center gap-2 text-xs font-medium text-neutral-200">
               <UserRound size={15} aria-hidden="true" /> Signed in as
@@ -1001,23 +1250,23 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
             <LogOut size={17} aria-hidden="true" /> {signingOut ? "Signing out..." : "Sign out"}
           </button>
           {authError && <p role="alert" className="mt-3 break-words text-xs text-red-300">{authError}</p>}
-          <p className="mt-5 px-3 text-xs text-neutral-500">DashTracker v1.2 · Cloud</p>
+
         </div>
       </aside>
 
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain lg:hidden">
+        <div className="fixed inset-0 z-50 flex items-end justify-center lg:hidden">
           <button type="button" aria-label="Close navigation" className="absolute inset-0 bg-black/70"
             onClick={() => setMobileMenuOpen(false)} />
-          <div className="relative flex min-h-full w-[min(82vw,300px)] flex-col border-r border-white/10 bg-[#171717] p-5 shadow-2xl">
+          <div className="relative max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-t-[30px] border-t border-white/15 bg-[var(--dt-raised)] p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl">
             <div className="mb-5 flex shrink-0 items-center justify-between">
-              <span className="font-bold">{APP_NAME}</span>
+              <span className="font-bold">Explore DashTracker</span>
               <button type="button" aria-label="Close menu" onClick={() => setMobileMenuOpen(false)}><X size={21} /></button>
             </div>
-            <nav aria-label="Mobile menu" className="space-y-2 pb-3">
+            <nav aria-label="All workspace sections" className="grid grid-cols-2 gap-2 pb-3">
               {navigation.map(({ id, label, icon: Icon }) => (
                 <button key={id} type="button" onClick={() => navigate(id)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm ${
+                  className={`flex min-h-14 w-full items-center gap-3 rounded-2xl border border-white/[0.06] px-4 py-3 text-left text-sm ${
                     section === id ? "bg-white/10 text-white" : "text-neutral-300 hover:bg-white/5"
                   }`}>
                   <Icon size={18} />{label}
@@ -1038,98 +1287,159 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
         </div>
       )}
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/10 bg-[#090909]/95 px-4 backdrop-blur-xl sm:px-8">
-          <div className="flex items-center gap-3">
-            <button type="button" aria-label="Open navigation" onClick={() => setMobileMenuOpen(true)}
-              className="rounded-lg p-2 text-neutral-300 hover:bg-white/10 lg:hidden"><Menu size={22} /></button>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="hidden text-neutral-500 sm:inline">Workspace /</span>
-              <span className="font-medium">{activeSection?.label ?? "Overview"}</span>
+      <div className="relative z-10 lg:pl-64">
+        <header className="sticky top-0 z-30 border-b border-white/[0.055] bg-[var(--dt-bg)]/85 px-4 backdrop-blur-2xl sm:px-8">
+          <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-[17px] border border-[var(--accent)]/20 bg-[var(--dt-raised)] text-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,.12)]">
+                <Activity size={22} strokeWidth={2.25}/>
+                <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-[3px] border-[var(--dt-bg)] bg-[var(--accent)]"/>
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[17px] font-extrabold tracking-[-.05em] text-white lg:text-[15px]">{section === "dashboard" ? APP_NAME : activeSection?.label}</p>
+                <p className="truncate text-[11px] text-neutral-500">{section === "dashboard" ? (currentDate ? dateLabel(currentDate) : "Your personal space") : APP_NAME}</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-              <span className="hidden text-xs text-neutral-500 md:inline">
-                {currentDate ? dateLabel(currentDate) : ""}
-              </span>
-              <span className="hidden max-w-48 truncate text-xs text-neutral-400 xl:inline" title={accountEmail}>
-                {accountEmail}
-              </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <button type="button" onClick={() => navigate("calendar")} aria-label="Open calendar"
+                className="flex h-11 w-11 items-center justify-center rounded-[16px] border border-white/[0.09] bg-white/[0.055] text-neutral-300 transition hover:border-[var(--accent)]/40 hover:text-[var(--accent)] lg:hidden"><Bell size={19}/></button>
+              <button type="button" onClick={() => navigate("settings")} aria-label="Open settings"
+                className="flex h-11 w-11 items-center justify-center rounded-[16px] border border-white/[0.09] bg-white/[0.055] text-neutral-300 transition hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"><Settings2 size={19}/></button>
               <button type="button" onClick={() => void onSignOut()} disabled={signingOut}
                 aria-label="Sign out of DashTracker" title="Sign out"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-neutral-200 hover:bg-white/20 disabled:opacity-50">
-                <LogOut size={16} aria-hidden="true" />
-              </button>
+                className="hidden h-11 w-11 items-center justify-center rounded-[16px] border border-white/[0.09] bg-white/[0.055] text-neutral-300 transition hover:bg-white/10 disabled:opacity-50 lg:flex"><LogOut size={17}/></button>
+            </div>
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-4 pb-28 pt-8 sm:px-8 lg:pb-12">
+        <main className="relative mx-auto max-w-7xl px-4 pb-36 pt-5 sm:px-8 sm:pt-9 lg:pb-12">
           {authError && <p role="alert" className="mb-5 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm text-neutral-200">{authError}</p>}
           {section === "dashboard" ? (
-            <>
-              <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-neutral-300">
-                    {currentDate ? dateLabel(currentDate) : ""}
-                  </p>
-                  <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                    {currentDate ? greeting(currentDate) : "Welcome"} 👋
-                  </h2>
-                  <p className="mt-3 text-sm text-neutral-400">Your personal space to focus, plan, and make progress.</p>
+            <div className="space-y-5 sm:space-y-7 dt-enter">
+              {/* Personal, compact greeting like a native phone app. */}
+              <div className="flex items-center justify-between gap-3 py-1">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[.19em] text-[var(--accent)]">{currentDate ? dateLabel(currentDate) : "TODAY"}</p>
+                  <h2 className="mt-2 truncate text-[28px] font-extrabold leading-tight tracking-[-.06em] sm:text-4xl">{currentDate ? greeting(currentDate) : "Welcome back"} <span className="text-[var(--accent)]">✦</span></h2>
                 </div>
-                <button type="button" onClick={() => navigate("tasks")}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-neutral-100 px-5 py-3 text-sm font-semibold text-neutral-950 hover:bg-white">
-                  <Plus size={18} /> Manage tasks
+                <button type="button" onClick={() => setQuickAddOpen(true)} aria-label="Add a new task"
+                  className="dt-dashboard-card flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/15 text-[var(--accent)] sm:h-12 sm:w-auto sm:gap-2 sm:bg-[var(--accent)] sm:px-5 sm:text-[var(--dt-on-accent)]">
+                  <Plus size={21}/><span className="hidden text-sm font-bold sm:inline">New task</span>
                 </button>
               </div>
 
-              <div className="mb-7 grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <StatCard title="Total Tasks" value={loaded ? String(tasks.length) : "—"}
-                  description="In your workspace" icon={ListTodo} />
-                <StatCard title="Completed" value={loaded ? String(completedCount) : "—"}
-                  description="All-time completed" icon={CheckCircle2} />
-                <StatCard title="Due Today" value={loaded && today ? String(dueTodayCount) : "—"}
-                  description="Unfinished, due today" icon={CalendarDays} />
-                <StatCard title="Overdue" value={loaded && today ? String(overdueCount) : "—"}
-                  description="Unfinished past deadlines" icon={Clock3} />
+              {/* Slide 1: task overview. Slide 2: habits. Slide 3: schedule. */}
+              <section aria-label="Featured dashboard widgets" className="space-y-3">
+                <div className="dt-glass-card dt-inferno-outline dt-dashboard-card relative min-h-[244px] touch-pan-y select-none overflow-hidden rounded-[29px] p-5 sm:min-h-[300px] sm:p-8"
+                  onTouchStart={event => { const touch = event.touches[0]; swipeStart.current = { x: touch.clientX, y: touch.clientY }; }}
+                  onTouchEnd={event => { const touch = event.changedTouches[0]; completeFeatureSwipe(swipeStart.current, touch.clientX, touch.clientY); swipeStart.current = null; }}
+                  onTouchCancel={() => { swipeStart.current = null; }}
+                  onPointerDown={event => { if (event.pointerType === "mouse" && event.button === 0) mouseSwipeStart.current = { x: event.clientX, y: event.clientY }; }}
+                  onPointerUp={event => { if (event.pointerType === "mouse") { completeFeatureSwipe(mouseSwipeStart.current, event.clientX, event.clientY); mouseSwipeStart.current = null; } }}
+                  onPointerCancel={() => { mouseSwipeStart.current = null; }}>
+                  <div className="dt-hero-shine absolute inset-0"/>
+                  <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[var(--accent)]/[0.09] blur-3xl"/>
+                  <div className="pointer-events-none absolute -bottom-20 right-0 h-48 w-48 rounded-full bg-[var(--accent)]/[0.09] blur-3xl"/>
+                  <div key={featureSlide} className="dt-feature-swipe relative">
+                  {featureSlide === 0 ? (
+                    <div className="relative flex h-full min-h-[202px] flex-col justify-between sm:min-h-[232px]">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/10 px-3 py-1.5 text-[11px] font-semibold text-[var(--accent)]">Daily command center</span>
+                        <span className="flex items-center gap-1 text-[var(--accent)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]"/><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]/55"/><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]/25"/></span>
+                      </div>
+                      <div className="grid grid-cols-[minmax(0,1fr)_112px] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_195px]">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-medium text-neutral-400">YOUR MOMENTUM</p>
+                          <h3 className="mt-2 text-[48px] font-black leading-none tracking-[-.08em] text-white sm:text-7xl">{loaded ? `${overallProgress}%` : "—"}</h3>
+                          <p className="mt-2 text-xs text-neutral-400">{loaded ? `${totalCompletedCount} / ${totalTaskCount} tasks complete` : "Loading progress"}</p>
+                        </div>
+                        <div className="relative flex h-[112px] w-[112px] items-center justify-center sm:h-[170px] sm:w-[170px]" aria-label={`${overallProgress}% completed`}>
+                          <svg viewBox="0 0 120 120" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
+                            <circle cx="60" cy="60" r="46" fill="none" stroke="rgba(255,255,255,.11)" strokeWidth="7"/>
+                            <circle cx="60" cy="60" r="46" fill="none" stroke="var(--accent)" strokeLinecap="round" strokeWidth="7" strokeDasharray={2 * Math.PI * 46} strokeDashoffset={2 * Math.PI * 46 * (1 - overallProgress / 100)} className="transition-all duration-700"/>
+                            <circle cx="60" cy="60" r="32" fill="none" stroke="rgba(255,255,255,.05)" strokeWidth="1" strokeDasharray="2 6"/>
+                          </svg>
+                          <div className="flex flex-col items-center gap-1"><Activity size={25} className="text-[var(--accent)]"/><span className="text-[9px] font-bold tracking-wide text-neutral-400">TODAY</span></div>
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => navigate("tasks")} className="mt-4 inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-xs font-bold text-[var(--dt-on-accent)] shadow-[0_5px_25px_var(--accent-glow)] transition active:scale-95">Open tasks <ArrowRight size={15}/></button>
+                    </div>
+                  ) : featureSlide === 1 ? (
+                    <div className="relative flex min-h-[202px] flex-col justify-between sm:min-h-[232px]">
+                      <div className="flex items-center justify-between"><span className="rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/10 px-3 py-1.5 text-[11px] font-semibold text-[var(--accent)]">Habits & consistency</span><Flame size={21} className="text-[var(--accent)]"/></div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div><p className="text-xs text-neutral-400">CHECKED IN TODAY</p><h3 className="mt-2 text-5xl font-black tracking-[-.07em]">{habitsLoaded ? `${todayHabitCount}/${habits.length}` : "—"}</h3><p className="mt-2 text-xs text-neutral-400">{habitsLoaded ? `${mostConsistent}-day best active streak` : "Your daily rhythm"}</p></div>
+                        <div className="flex h-28 w-28 items-end justify-center gap-2 rounded-[26px] border border-white/10 bg-black/20 p-4 sm:h-36 sm:w-40">
+                          {[35,60,48,84,55,95].map((height,i)=><span key={i} className="w-3 rounded-t-lg bg-[var(--accent)]" style={{height:`${height}%`,opacity:.3+i*.13}}/>)}
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => navigate("habits")} className="mt-4 inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-xs font-bold text-[var(--dt-on-accent)]">Open habits <ArrowRight size={15}/></button>
+                    </div>
+                  ) : (
+                    <div className="relative flex min-h-[202px] flex-col justify-between sm:min-h-[232px]">
+                      <div className="flex items-center justify-between"><span className="rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/10 px-3 py-1.5 text-[11px] font-semibold text-[var(--accent)]">Your schedule</span><CalendarDays size={21} className="text-[var(--accent)]"/></div>
+                      <div className="flex items-center justify-between gap-4"><div><p className="text-xs text-neutral-400">ON YOUR CALENDAR</p><h3 className="mt-2 text-5xl font-black tracking-[-.07em]">{eventsLoaded ? String(todayEvents.length).padStart(2,"0") : "—"}</h3><p className="mt-2 text-xs text-neutral-400">Events on today's schedule</p></div><div className="grid h-28 w-28 grid-cols-3 gap-2 rounded-[26px] border border-white/10 bg-black/20 p-3 sm:h-36 sm:w-40">{Array.from({length:9},(_,i)=><span key={i} className={`rounded-lg ${i===4?"bg-[var(--accent)] shadow-[0_0_18px_var(--accent-glow)]":"bg-white/10"}`}/>)}</div></div>
+                      <button type="button" onClick={() => navigate("calendar")} className="mt-4 inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-xs font-bold text-[var(--dt-on-accent)]">Open calendar <ArrowRight size={15}/></button>
+                    </div>
+                  )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-center gap-2" role="tablist" aria-label="Featured widgets">
+                  {["Tasks", "Habits", "Calendar"].map((label,index)=><button type="button" role="tab" aria-selected={featureSlide===index} aria-label={`Show ${label} widget`} key={label} onClick={()=>setFeatureSlide(index)} className={`h-2 rounded-full transition-all duration-300 ${featureSlide===index?"w-7 bg-[var(--accent)] shadow-[0_0_14px_var(--accent-glow)]":"w-2 bg-white/20 hover:bg-white/50"}`}/>)}
+                </div>
+              </section>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <MobileMetric icon={GitCommitHorizontal} title="Open tasks" value={loaded ? String(pendingCount).padStart(2,"0") : "—"} detail="Tasks waiting" onClick={() => navigate("tasks")} />
+                <MobileMetric icon={Cloud} title="Habits" value={habitsLoaded ? `${todayHabitCount}/${habits.length}` : "—"} detail="Daily check-ins" onClick={() => navigate("habits")} />
+                <MobileMetric icon={CalendarDays} title="Events" value={eventsLoaded ? String(todayEvents.length).padStart(2,"0") : "—"} detail="Scheduled today" onClick={() => navigate("calendar")} />
+                <MobileMetric icon={Zap} title="Best streak" value={habitsLoaded ? `${mostConsistent}d` : "—"} detail="Stay consistent" onClick={() => navigate("habits")} />
               </div>
 
-              <div className="mb-7 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-                <div className={`${cardClass} p-5 sm:p-6`}>
-                  <div className="mb-6 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold">Task progress</h3>
-                      <p className="mt-1 text-xs text-neutral-500">Completion across all your tasks</p>
+              <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,1fr)]">
+                <div className="space-y-5">
+                  <section className="dt-glass-card overflow-hidden rounded-[27px]" aria-label="Recent tasks">
+                    <div className="flex items-center justify-between gap-3 px-5 pb-3 pt-5 sm:px-6">
+                      <div><h3 className="text-[17px] font-bold tracking-tight">Recent activity</h3><p className="mt-1 text-[11px] text-neutral-500">Latest tasks first</p></div>
+                      <button type="button" onClick={() => navigate("tasks")} className="min-h-10 shrink-0 text-xs font-semibold text-[var(--accent)]">View all <ArrowRight size={14} className="inline" /></button>
                     </div>
-                    <span className="text-2xl font-bold text-neutral-100">{loaded ? progress : "—"}%</span>
-                  </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-white/10">
-                    <div className="h-full rounded-full bg-gradient-to-r from-neutral-400 to-white transition-all duration-500"
-                      style={{ width: `${progress}%` }} />
-                  </div>
-                  <div className="mt-4 flex justify-between text-xs text-neutral-500">
-                    <span>{completedCount} completed</span><span>{pendingCount} remaining</span>
-                  </div>
+                    <div className="divide-y divide-white/[0.055]">
+                      {!loaded ? <p className="px-5 py-7 text-sm text-neutral-500">Loading tasks...</p> : focusTasks.length === 0 ? (
+                        <div className="px-5 py-8 text-center"><CheckCircle2 className="mx-auto mb-3 text-[var(--accent)]" size={27}/><p className="text-sm font-medium">No tasks yet</p></div>
+                      ) : focusTasks.map(task => (
+                        <button key={task.id} type="button" disabled={taskBusy}
+                          onClick={() => void toggleTask(task.id)}
+                          aria-label={`${task.completed ? "Mark incomplete" : "Complete"}: ${task.title}`}
+                          aria-pressed={task.completed}
+                          className={`dt-dashboard-card dt-task-row flex min-h-[74px] w-full items-center gap-3 px-5 text-left transition-colors disabled:opacity-50 ${compactMode ? "py-2.5" : "py-3.5"} sm:px-6`}>
+                          <span aria-hidden="true" className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors ${task.completed ? "border-[var(--accent)]/45 bg-[var(--accent)]/15 text-[var(--accent)]" : "border-white/20 bg-white/[0.035] text-neutral-300"}`}>
+                            {task.completed ? <Check size={21} strokeWidth={2.7}/> : <Circle size={24} strokeWidth={1.75}/>} 
+                          </span>
+                          <span className="min-w-0 flex-1"><span className={`block break-words text-sm font-medium leading-5 ${task.completed ? "text-neutral-500 line-through" : "text-neutral-100"}`}>{task.title}</span><span className="mt-1 block text-[11px] text-neutral-500">{task.completed ? "Completed" : task.dueDate ? task.dueDate < today ? "Overdue" : task.dueDate === today ? "Due today" : readableDueDate(task.dueDate) : "No deadline"} · {capitalize(task.priority)}</span></span>
+                          <ChevronRight aria-hidden="true" size={17} className="shrink-0 text-neutral-500"/>
+                        </button>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => setQuickAddOpen(true)} className="flex min-h-14 w-full items-center justify-center gap-2 border-t border-white/[0.08] text-sm font-semibold text-[var(--accent)] transition hover:bg-white/5"><Plus size={17}/> New task</button>
+                  </section>
+                  <section className="dt-glass-card rounded-[27px] p-5 sm:p-6" aria-label="Daily habits">
+                    <div className="mb-5 flex items-center justify-between gap-3"><div><h3 className="text-[17px] font-bold tracking-tight">Daily rituals</h3><p className="mt-1 text-xs text-neutral-500">Your consistency</p></div><button type="button" onClick={() => navigate("habits")} className="min-h-10 text-xs font-semibold text-[var(--accent)]">View all <ArrowRight size={14} className="inline" /></button></div>
+                    {!habitsLoaded ? <p className="text-sm text-neutral-500">Loading habits...</p> : habits.length === 0 ? <p className="rounded-xl bg-white/5 p-4 text-sm text-neutral-400">No habits yet.</p> : (
+                      <div className="space-y-2">{habits.map(habit => {const done = today && habit.checkIns.includes(today);return <button key={habit.id} type="button" disabled={!today || habitBusy} onClick={() => void toggleHabit(habit.id,today)} aria-pressed={Boolean(done)} className={`dt-dashboard-card flex min-h-14 w-full items-center gap-3 rounded-2xl border px-3.5 text-left disabled:opacity-60 ${done?"border-[var(--accent)]/30 bg-[var(--accent)]/10":"border-white/[0.07] bg-[var(--dt-raised)]"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${done?"bg-[var(--accent)] text-[var(--dt-on-accent)]":"bg-[var(--accent)]/10 text-[var(--accent)]"}`}>{done?<Check size={18}/>:<Flame size={17}/>}</span><span className="min-w-0 flex-1 truncate text-sm font-medium">{habit.name}</span><span className="text-[11px] text-[var(--accent)]">{habitStreak(habit,today)}d</span></button>})}</div>
+                    )}
+                  </section>
                 </div>
-                <div className="flex flex-col justify-between rounded-2xl border border-white/15 bg-gradient-to-br from-[#272727] via-[#171717] to-[#171717] p-5 sm:p-6">
-                  <div className="flex items-center gap-2 text-neutral-200"><Target size={18} /><h3 className="font-semibold">Stay consistent</h3></div>
-                  <p className="my-4 text-sm leading-6 text-neutral-300">
-                    Set a deadline for important work, then use the due-date sort to plan what comes next.
-                  </p>
-                  <button type="button" onClick={() => navigate("tasks")}
-                    className="flex items-center gap-2 text-sm font-semibold text-neutral-100 hover:text-white">
-                    View your tasks <ArrowRight size={16} />
-                  </button>
-                </div>
+                <section className="dt-glass-card rounded-[27px] p-5 sm:p-6" aria-label="Today's schedule">
+                  <div className="mb-5 flex items-center justify-between gap-3"><div><h3 className="text-[17px] font-bold tracking-tight">Coming up</h3><p className="mt-1 text-xs text-neutral-500">Today's schedule</p></div><button type="button" onClick={() => navigate("calendar")} className="min-h-10 text-xs font-semibold text-[var(--accent)]">Open <ArrowRight size={14} className="inline" /></button></div>
+                  {!eventsLoaded ? <p className="text-sm text-neutral-500">Loading events...</p> : todayEvents.length === 0 ? <div className="rounded-2xl border border-dashed border-white/[0.14] p-6 text-center"><CalendarDays size={25} className="mx-auto text-[var(--accent)]"/><p className="mt-3 text-sm font-medium">Nothing scheduled</p></div> : <div className="space-y-2">{todayEvents.map(event=><div key={event.id} className="dt-dashboard-card rounded-2xl border border-white/[0.08] bg-[var(--dt-raised)] px-4 py-3"><p className="text-[11px] font-semibold text-[var(--accent)]">{event.time || "All day"}</p><p className="mt-1.5 text-sm font-medium">{event.title}</p></div>)}</div>}
+                  <button type="button" onClick={() => navigate("calendar")} className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)]/10 text-xs font-semibold text-[var(--accent)]"><CalendarPlus size={16}/> Plan your day</button>
+                </section>
               </div>
-            </>
+            </div>
           ) : (
             <div className="mb-8">
-              <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-neutral-300">DASHTRACKER WORKSPACE</p>
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">{activeSection?.label}</h2>
-              <p className="mt-3 text-sm text-neutral-400">
-                {section === "tasks" ? "Organize everything you want to get done." : section === "calendar" ? "Plan events and track scheduled tasks." : section === "habits" ? "Create routines, record daily check-ins, and measure your goals." : section === "notes" ? "Capture ideas, keep important details, and find them quickly." : section === "projects" ? "Organize projects, milestones, and deadlines in one workspace." : section === "finance" ? "Record income and expenses, understand spending, and plan your budget." : "This module will be built in an upcoming milestone."}
-              </p>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[.17em] text-[var(--accent)]">DASHTRACKER</p>
+              <h2 className="text-3xl font-extrabold tracking-[-.06em] sm:text-4xl">{activeSection?.label}</h2>
             </div>
           )}
 
@@ -1138,11 +1448,11 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
               <div className="border-b border-white/10 p-5 sm:p-6">
                 <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                   <div>
-                    <h3 className="text-lg font-semibold">{section === "dashboard" ? "Your tasks" : "Task manager"}</h3>
+                    <h3 className="text-lg font-semibold">Task manager</h3>
                     <p className="mt-1 text-xs text-neutral-500">{pendingCount} pending · {completedCount} completed</p>
                   </div>
                   <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs text-neutral-400">
-                    <CheckCircle2 size={15} /> {taskBusy ? "Saving to cloud..." : "Saved in Supabase"}
+                    <CheckCircle2 size={15} /> {taskBusy ? "Saving to cloud..." : "Up to date"}
                   </div>
                 </div>
 
@@ -1180,7 +1490,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
                   </div>
                 </form>
                 <p id="task-form-message" role="status" aria-live="polite" className="mt-3 min-h-5 text-xs text-neutral-400">
-                  {taskMessage || "Choose a priority and category, optionally set a deadline, then add your task."}
+                  {taskMessage || ""}
                 </p>
               </div>
 
@@ -1233,7 +1543,7 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
                     <div className="mb-4 rounded-2xl bg-white/5 p-4 text-neutral-500"><ListTodo size={30} /></div>
                     <h4 className="font-semibold">{tasks.length ? "No matching tasks" : "Your task list is empty"}</h4>
                     <p className="mt-2 max-w-sm text-sm text-neutral-500">
-                      {tasks.length ? "Try changing the search, status, or category filter." : "Add your first task above and start making progress."}
+                      {tasks.length ? "Try changing the search, status, or category filter." : "Add your first task."}
                     </p>
                   </div>
                 ) : visibleTasks.map((task) => {
@@ -1283,9 +1593,11 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
                           </form>
                         ) : (
                           <>
-                            <p className={`break-words text-sm ${task.completed ? "text-neutral-500 line-through" : "text-neutral-100"}`}>
+                            <button type="button" disabled={taskBusy} onClick={() => void toggleTask(task.id)}
+                              aria-pressed={task.completed} aria-label={`${task.completed ? "Mark incomplete" : "Complete"}: ${task.title}`}
+                              className={`dt-touch block min-h-9 w-full break-words rounded-lg py-2 text-left text-sm disabled:opacity-50 ${task.completed ? "text-neutral-500 line-through" : "text-neutral-100"}`}>
                               {task.title}
-                            </p>
+                            </button>
                             <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-neutral-400">
                               <span className="rounded-md border border-white/15 bg-white/5 px-2 py-1">{capitalize(task.priority)} priority</span>
                               <span className="rounded-md border border-white/15 bg-white/5 px-2 py-1">{task.category}</span>
@@ -1363,37 +1675,137 @@ function Home({ accountEmail, accountUserId, onSignOut, signingOut, authError }:
             <ProjectsPanel today={today} userId={accountUserId} />
           ) : section === "finance" ? (
             <FinancePanel today={today} userId={accountUserId} />
-          ) : (
+          ) : section === "settings" ? (
+            <div className="mx-auto max-w-3xl space-y-5">
+              <div className="flex items-center gap-4 rounded-[25px] border border-white/10 bg-[var(--dt-hero)] p-5 sm:p-7">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] bg-white/10"><UserRound size={28}/></div>
+                <div className="min-w-0"><p className="text-xs font-medium uppercase tracking-[0.13em] text-[var(--accent)]">Your account</p><p className="mt-1 truncate text-base font-semibold sm:text-lg" title={accountEmail}>{accountEmail}</p></div>
+              </div>
+
+              <section className="overflow-hidden rounded-[25px] border border-white/10 bg-[var(--dt-surface)]">
+                <div className="border-b border-white/[0.07] px-5 py-4"><h3 className="text-base font-semibold">Daily experience</h3><p className="mt-1 text-xs text-neutral-500">Preferences are saved on this device.</p></div>
+                <SettingToggle icon={ListChecks} label="Compact task list" description="Show tighter task rows on your Today screen." checked={compactMode} onChange={setCompactMode}/>
+                <SettingToggle icon={CheckCircle2} label="Show completed tasks" description="Include finished tasks in the home list." checked={showFinishedToday} onChange={setShowFinishedToday}/>
+                <div className="flex items-center gap-3 border-t border-white/[0.07] px-5 py-4">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/[0.065]"><Target size={19}/></span>
+                  <div className="min-w-0 flex-1"><p className="text-sm font-semibold">Quick-add priority</p><p className="mt-1 text-xs leading-5 text-neutral-500">Default priority for new tasks added from the + button.</p></div>
+                  <select aria-label="Default quick-add priority" value={quickAddPriority} onChange={event=>setQuickAddPriority(event.target.value as Priority)} className="min-h-11 rounded-xl border border-white/15 bg-[var(--dt-field)] px-2.5 text-xs text-white outline-none">
+                    {PRIORITIES.map(value=><option key={value} value={value}>{capitalize(value)}</option>)}
+                  </select>
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-[25px] border border-white/10 bg-[var(--dt-surface)]">
+                <div className="border-b border-white/[0.07] px-5 py-4"><h3 className="text-base font-semibold">Appearance & device</h3><p className="mt-1 text-xs text-neutral-500"></p></div>
+                 <div className="px-5 py-5">
+                   <div className="mb-4 flex items-center gap-3">
+                     <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--accent)]/30 bg-[var(--accent-glow)] text-[var(--accent)]"><Sparkles size={19}/></span>
+                     <div className="min-w-0 flex-1"><p className="text-sm font-semibold">App themes</p><p className="mt-1 text-xs text-neutral-400">Choose your look — Inferno matches the new design</p></div>
+                   </div>
+                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                     {VISUAL_THEMES.map(theme => (
+                       <button key={theme.id} type="button" aria-pressed={visualTheme === theme.id} onClick={() => setVisualTheme(theme.id)}
+                         className={`dt-interact group overflow-hidden rounded-2xl border p-2 text-left transition ${visualTheme === theme.id ? "border-[var(--accent)] bg-white/10" : "border-white/10 bg-white/[.035] hover:border-white/25"}`}>
+                         <span className="relative mb-3 flex h-[86px] overflow-hidden rounded-xl border border-white/10 p-3" style={{ background: theme.preview }}>
+                           <span className="absolute bottom-2 left-2 h-9 w-[57%] rounded-lg border border-white/15 bg-black/35 backdrop-blur-sm" />
+                           <span className="absolute bottom-4 left-4 h-3 w-[28%] rounded-full" style={{ background: theme.accent }} />
+                           <span className="absolute right-3 top-3 h-9 w-9 rounded-full border-[5px] border-white/20" style={{ borderTopColor: theme.accent, borderRightColor: theme.accent }} />
+                           {visualTheme === theme.id && <span className="absolute right-2 bottom-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-black"><Check size={15}/></span>}
+                         </span>
+                         <span className="block px-1 text-xs font-semibold text-white">{theme.name}</span>
+                         <span className="mb-1 mt-1 block px-1 text-[10px] text-neutral-400">{theme.description}</span>
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+                <div className="flex items-center gap-3 border-t border-white/[0.07] px-5 py-4"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.065]"><ShieldCheck size={19}/></span><div className="flex-1"><p className="text-sm font-semibold">Private workspace</p><p className="mt-1 text-xs text-neutral-500">Only you can access your workspace.</p></div><CheckCircle2 size={18} className="text-neutral-300"/></div>
+              </section>
+
+              <section className="rounded-[25px] border border-white/10 bg-[var(--dt-surface)] p-5 sm:p-6">
+                <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.065]"><Database size={20}/></div><div><h3 className="text-sm font-semibold">Export your data</h3><p className="mt-1 text-xs text-neutral-500">Download a copy of your data.</p></div></div>
+                <button type="button" onClick={() => void exportAllData()} disabled={backupBusy} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white/[0.07] text-sm font-semibold transition hover:bg-white/10 disabled:opacity-50"><Download size={17}/>{backupBusy ? "Preparing backup..." : "Download my data"}</button>
+                <p role="status" aria-live="polite" className="mt-3 text-xs leading-5 text-neutral-500">{backupMessage || "Keep your backup private."}</p>
+              </section>
+
+              <section className="rounded-[25px] border border-white/10 bg-[var(--dt-surface)] p-5 sm:p-6">
+                <h3 className="text-sm font-semibold">Account & security</h3><p className="mt-1 text-xs text-neutral-500"></p>
+                <button type="button" onClick={() => void onSignOut()} disabled={signingOut} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/20 text-sm font-semibold text-neutral-200 transition hover:bg-white/[0.07] disabled:opacity-50"><LogOut size={17}/>{signingOut ? "Signing out..." : "Sign out"}</button>
+              </section>
+
+            </div>
+          ) : section !== "dashboard" ? (
             <div className={`${cardClass} p-10 text-center`}>
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-neutral-100">
                 {activeSection && <activeSection.icon size={26} />}
               </div>
               <h3 className="text-lg font-semibold">{activeSection?.label} is coming soon</h3>
               <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-neutral-400">
-                We&apos;re building DashTracker one working feature at a time. Your task manager is ready to use now.
+                Your space is ready.
               </p>
               <button type="button" onClick={() => navigate("dashboard")}
                 className="mt-6 inline-flex items-center gap-2 rounded-xl bg-neutral-100 px-5 py-3 text-sm font-semibold text-neutral-950 hover:bg-white">
                 Back to dashboard <ArrowRight size={16} />
               </button>
             </div>
-          )}
+          ) : null}
         </main>
       </div>
 
-      <nav aria-label="Bottom navigation" className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-white/10 bg-[#151515]/95 px-2 py-2 backdrop-blur-xl lg:hidden">
-        {([
-          { id: "dashboard" as Section, label: "Home", icon: LayoutDashboard },
-          { id: "tasks" as Section, label: "Tasks", icon: ListTodo },
-          { id: "calendar" as Section, label: "Calendar", icon: CalendarDays },
-          { id: "habits" as Section, label: "Habits", icon: Flame },
-        ]).map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" onClick={() => navigate(id)}
-            className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg py-2 text-[10px] ${
-              section === id ? "text-white" : "text-neutral-500 hover:text-neutral-300"
-            }`}><Icon size={19} />{label}</button>
-        ))}
+      <nav aria-label="Mobile bottom navigation" className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(12px,env(safe-area-inset-bottom))] lg:hidden">
+        <div className="dt-dock pointer-events-auto mx-auto grid h-[76px] max-w-[440px] grid-cols-5 items-center gap-0.5 rounded-[26px] px-2 backdrop-blur-2xl">
+          {([
+            { id: "dashboard" as Section, label: "Home", icon: LayoutDashboard },
+            { id: "tasks" as Section, label: "Tasks", icon: ListTodo },
+          ]).map(({ id, label, icon: Icon }) => (
+            <button key={id} type="button" onClick={() => navigate(id)} aria-current={section === id ? "page" : undefined}
+              className={`dt-touch relative flex h-[62px] min-w-0 flex-col items-center justify-center gap-1 rounded-[18px] text-[10px] font-semibold ${section === id ? "text-[var(--accent)]" : "text-neutral-400"}`}>
+              <Icon size={21} strokeWidth={section === id ? 2.4 : 1.8} />{label}
+              {section === id && <span className="absolute bottom-0 h-1 w-1 rounded-full bg-[var(--accent)]" />}
+            </button>
+          ))}
+          <button type="button" onClick={() => { setMobileMenuOpen(false); setQuickAddOpen(true); }} aria-label="Quick add task"
+            className="dt-touch mx-auto flex h-[54px] w-[54px] items-center justify-center rounded-[18px] bg-[var(--accent)] text-[var(--dt-on-accent)] shadow-[0_0_22px_var(--accent-glow)]">
+            <Plus size={26} strokeWidth={2.6}/>
+          </button>
+          <button type="button" onClick={() => navigate("calendar")} aria-current={section === "calendar" ? "page" : undefined}
+            className={`dt-touch relative flex h-[62px] min-w-0 flex-col items-center justify-center gap-1 rounded-[18px] text-[10px] font-semibold ${section === "calendar" ? "text-[var(--accent)]" : "text-neutral-400"}`}>
+            <CalendarDays size={21} strokeWidth={section === "calendar" ? 2.4 : 1.8}/>Plan
+            {section === "calendar" && <span className="absolute bottom-0 h-1 w-1 rounded-full bg-[var(--accent)]" />}
+          </button>
+          <button type="button" onClick={() => setMobileMenuOpen(true)} aria-label="Open all sections"
+            className={`dt-touch relative flex h-[62px] min-w-0 flex-col items-center justify-center gap-1 rounded-[18px] text-[10px] font-semibold ${!["dashboard", "tasks", "calendar"].includes(section) ? "text-[var(--accent)]" : "text-neutral-400"}`}>
+            <Compass size={21}/>More
+          </button>
+        </div>
       </nav>
+
+      {quickAddOpen && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/75 backdrop-blur-sm sm:items-center sm:px-4" onClick={()=>setQuickAddOpen(false)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="quick-add-heading" onClick={event=>event.stopPropagation()}
+            className="w-full max-w-md rounded-t-[30px] border border-white/15 bg-[var(--dt-raised)] px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 shadow-2xl sm:rounded-[28px] sm:p-6">
+            <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-white/20 sm:hidden"/>
+            <div className="mb-5 flex items-center justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">CAPTURE AN IDEA</p><h2 id="quick-add-heading" className="mt-1 text-xl font-bold tracking-tight">Create a task</h2></div><button type="button" onClick={()=>setQuickAddOpen(false)} aria-label="Close quick add" className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.07]"><X size={19}/></button></div>
+            <form onSubmit={addQuickTask} className="space-y-4">
+              <label className="block text-xs font-medium text-neutral-400">What needs doing?
+                <input autoFocus required maxLength={200} value={quickAddTitle} onChange={event=>{setQuickAddTitle(event.target.value);setQuickAddError("");}} placeholder="e.g. Review today's priorities" className={`${fieldClass} mt-2 min-h-14 text-base`}/>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs text-neutral-400">Due date
+                  <input type="date" value={quickAddDate} onChange={event=>setQuickAddDate(event.target.value)} className={`${fieldClass} mt-2 scheme-dark`}/>
+                </label>
+                <label className="block text-xs text-neutral-400">Priority
+                  <select value={quickAddPriority} onChange={event=>setQuickAddPriority(event.target.value as Priority)} className={`${fieldClass} mt-2`}>
+                    {PRIORITIES.map(priority=><option key={priority} value={priority}>{capitalize(priority)}</option>)}
+                  </select>
+                </label>
+              </div>
+              {quickAddError && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-xs text-red-200">{quickAddError}</p>}
+              <button type="submit" disabled={!loaded || taskBusy} className="dt-interact flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] text-sm font-bold text-[var(--dt-on-accent)]  disabled:opacity-50"><Plus size={18}/>{taskBusy?"Saving...":"Add to my tasks"}</button>
+              
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -1490,7 +1902,7 @@ function CalendarPanel({ tasks, events, loaded, selectedDate, viewMonth, today,
                 className={`flex min-h-14 flex-col items-center justify-start rounded-lg border px-1 py-2 text-center transition sm:min-h-20 sm:rounded-xl ${
                   isSelected ? "border-neutral-100 bg-neutral-100 text-neutral-950" :
                   isToday ? "border-neutral-400 bg-white/10 text-white" :
-                  "border-white/5 bg-[#202020] text-neutral-200 hover:border-white/30 hover:bg-[#292929]"
+                  "border-white/5 bg-[var(--dt-raised)] text-neutral-200 hover:border-white/30 hover:bg-[#292929]"
                 } ${inMonth ? "" : "opacity-45"}`}>
                 <span className="text-xs font-semibold sm:text-sm">{Number(key.slice(8))}</span>
                 <div className="mt-1 flex flex-wrap justify-center gap-1">
@@ -1506,7 +1918,7 @@ function CalendarPanel({ tasks, events, loaded, selectedDate, viewMonth, today,
           <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-neutral-100" />Task deadline</span>
           <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-neutral-500" />Calendar event</span>
         </div>
-        <p className="mt-3 text-xs text-neutral-500">Dates follow your device&apos;s local calendar. Choose a day to see its schedule.</p>
+        <p className="mt-3 text-xs text-neutral-500"></p>
       </section>
 
       <div className="min-w-0 space-y-5">
@@ -1524,7 +1936,7 @@ function CalendarPanel({ tasks, events, loaded, selectedDate, viewMonth, today,
               <div className="space-y-4">
                 {dayEvents.length > 0 && <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Events</p>
-                  {dayEvents.map((item) => <div key={item.id} className="rounded-xl border border-white/10 bg-[#202020] p-3">
+                  {dayEvents.map((item) => <div key={item.id} className="rounded-xl border border-white/10 bg-[var(--dt-raised)] p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="break-words text-sm font-medium">{item.title}</p>
@@ -1540,7 +1952,7 @@ function CalendarPanel({ tasks, events, loaded, selectedDate, viewMonth, today,
                 </div>}
                 {dayTasks.length > 0 && <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Task deadlines</p>
-                  {dayTasks.map((task) => <div key={task.id} className="flex items-start gap-2 rounded-xl border border-white/10 bg-[#202020] p-3">
+                  {dayTasks.map((task) => <div key={task.id} className="flex items-start gap-2 rounded-xl border border-white/10 bg-[var(--dt-raised)] p-3">
                     <button type="button" aria-label={task.completed ? `Mark ${task.title} incomplete` : `Complete ${task.title}`}
                       onClick={() => onToggleTask(task.id)} className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${task.completed ? "bg-neutral-100 text-neutral-950" : "border-neutral-500 text-transparent"}`}><Check size={12} /></button>
                     <div className="min-w-0 flex-1">
@@ -1588,7 +2000,7 @@ function CalendarPanel({ tasks, events, loaded, selectedDate, viewMonth, today,
               {editingEventId && <button type="button" onClick={onCancelEventEdit}
                 className="rounded-xl border border-white/20 px-4 text-sm text-neutral-200 hover:bg-white/10">Cancel edit</button>}
             </div>
-            <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">{eventMessage || "Events are saved in Supabase."}</p>
+            <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">{eventMessage || ""}</p>
           </form>
         </section>
       </div>
@@ -1657,12 +2069,12 @@ function HabitsPanel({ habits, goals, loaded, today, habitFields, onHabitFields,
               <p className="text-sm text-neutral-500">Loading habits...</p>
             ) : habits.length === 0 ? (
               <div className="rounded-xl border border-dashed border-white/15 p-8 text-center text-sm text-neutral-400">
-                No habits yet. Create your first daily habit using the form.
+                No habits yet.
               </div>
             ) : (
               <div className="space-y-3">
                 {habits.map((habit) => (
-                  <div key={habit.id} className="rounded-xl border border-white/10 bg-[#202020] p-4">
+                  <div key={habit.id} className="rounded-xl border border-white/10 bg-[var(--dt-raised)] p-4">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="break-words text-sm font-semibold">{habit.name}</p>
@@ -1685,7 +2097,7 @@ function HabitsPanel({ habits, goals, loaded, today, habitFields, onHabitFields,
                             aria-pressed={checked} aria-label={`${habit.name}, ${day}, ${checked ? "completed" : "not completed"}`}
                             title={day}
                             className={`flex min-w-0 flex-col items-center gap-2 rounded-lg border px-1 py-2 text-[10px] transition ${checked
-                              ? "border-white bg-neutral-100 text-neutral-950" : "border-white/10 bg-[#111111] text-neutral-400 hover:border-white/40"}`}>
+                              ? "border-white bg-neutral-100 text-neutral-950" : "border-white/10 bg-[var(--dt-field)] text-neutral-400 hover:border-white/40"}`}>
                             <span>{dayLabel}</span>{checked ? <Check size={16}/> : <span className="flex h-4 items-center">{Number(day.slice(8))}</span>}
                           </button>
                         );
@@ -1700,14 +2112,14 @@ function HabitsPanel({ habits, goals, loaded, today, habitFields, onHabitFields,
           <section className={`${cardClass} p-5 sm:p-6`} aria-label="Goal tracker">
             <div className="mb-5 flex items-center gap-2"><Target size={20}/><h3 className="text-lg font-semibold">Goals</h3></div>
             {!loaded ? <p className="text-sm text-neutral-500">Loading goals...</p> : goals.length === 0 ? (
-              <p className="rounded-xl bg-white/5 p-5 text-sm text-neutral-400">Create a measurable goal to track your progress.</p>
+              <p className="rounded-xl bg-white/5 p-5 text-sm text-neutral-400">Set your first goal.</p>
             ) : (
               <div className="space-y-3">
                 {goals.map((goal) => {
                   const reached = goal.current >= goal.target;
                   const percentage = Math.min(100, Math.round(goal.current / goal.target * 100));
                   return (
-                    <div key={goal.id} className="rounded-xl border border-white/10 bg-[#202020] p-4">
+                    <div key={goal.id} className="rounded-xl border border-white/10 bg-[var(--dt-raised)] p-4">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="break-words text-sm font-semibold">{goal.title}</p>
@@ -1790,7 +2202,7 @@ function HabitsPanel({ habits, goals, loaded, today, habitFields, onHabitFields,
               </div>
             </form>
           </section>
-          <p role="status" aria-live="polite" className="px-1 text-xs text-neutral-400">{message || "Habits and goals are saved in Supabase."}</p>
+          <p role="status" aria-live="polite" className="px-1 text-xs text-neutral-400">{message || ""}</p>
         </div>
       </div>
     </div>
@@ -1827,7 +2239,7 @@ function NotesPanel({ userId }: { userId: string }) {
     busyRef.current = true;
     setBusy(true);
     try { await action(); return true; }
-    catch (error) { setMessage(`Cloud save failed: ${cloudError(error)}`); return false; }
+    catch (error) { setMessage(`Save failed: ${cloudError(error)}`); return false; }
     finally { busyRef.current = false; setBusy(false); }
   }
 
@@ -1874,7 +2286,7 @@ function NotesPanel({ userId }: { userId: string }) {
       }
     });
     if (!saved) return;
-    setMessage(current ? "Note updated in cloud." : "Note saved in cloud.");
+    setMessage(current ? "Note updated." : "Note saved.");
     resetEditor(); setQuery("");
   }
 
@@ -1907,20 +2319,20 @@ function NotesPanel({ userId }: { userId: string }) {
     });
     if (!saved) return;
     if (editingNoteId === id) resetEditor();
-    setMessage("Note deleted from cloud.");
+    setMessage("Note deleted.");
   }
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard title="Total Notes" value={notesLoaded ? String(notes.length) : "—"}
-          description="Saved in Supabase" icon={StickyNote} />
+          description="Up to date" icon={StickyNote} />
         <StatCard title="Pinned Notes" value={notesLoaded ? String(notes.filter((note) => note.pinned).length) : "—"}
           description="At the top of your list" icon={Pin} />
-        <div className="col-span-2 sm:col-span-1 rounded-2xl border border-white/10 bg-[#171717] p-4 sm:p-5">
+        <div className="col-span-2 sm:col-span-1 rounded-2xl border border-white/10 bg-[var(--dt-surface)] p-4 sm:p-5">
           <p className="text-xs font-medium text-neutral-400">Quick access</p>
           <p className="mt-4 text-sm text-neutral-200">Find notes by title or content.</p>
-          <p className="mt-2 text-xs text-neutral-500">Notes sync through Supabase on refresh.</p>
+          
         </div>
       </div>
 
@@ -1947,7 +2359,7 @@ function NotesPanel({ userId }: { userId: string }) {
               <div className="p-10 text-center">
                 <StickyNote size={28} className="mx-auto mb-3 text-neutral-500" />
                 <p className="text-sm font-semibold">{notes.length ? "No matching notes" : "No notes yet"}</p>
-                <p className="mt-2 text-xs text-neutral-500">{notes.length ? "Try a different search term." : "Use the editor to create your first note."}</p>
+                <p className="mt-2 text-xs text-neutral-500">{notes.length ? "Try a different search term." : "Create your first note."}</p>
               </div>
             ) : visibleNotes.map((note) => (
               <article key={note.id} className="p-4 transition hover:bg-white/[0.025] sm:p-6">
@@ -2008,7 +2420,7 @@ function NotesPanel({ userId }: { userId: string }) {
                 className="rounded-xl border border-white/20 px-4 text-sm text-neutral-200 hover:bg-white/10">Cancel edit</button>}
             </div>
             <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">
-              {message || "Notes are saved in Supabase."}
+              {message || ""}
             </p>
           </form>
         </section>
@@ -2051,7 +2463,7 @@ function ProjectsPanel({ today, userId }: { today: string; userId: string }) {
     busyRef.current = true;
     setBusy(true);
     try { await action(); return true; }
-    catch (error) { setMessage(`Cloud save failed: ${cloudError(error)}`); return false; }
+    catch (error) { setMessage(`Save failed: ${cloudError(error)}`); return false; }
     finally { busyRef.current = false; setBusy(false); }
   }
   async function updateProject(project: Project) {
@@ -2114,7 +2526,7 @@ function ProjectsPanel({ today, userId }: { today: string; userId: string }) {
       setProjects(items => [project, ...items]);
     });
     if (!saved) return;
-    setMessage(current ? "Project updated in cloud." : "Project saved in cloud.");
+    setMessage(current ? "Project updated." : "Project saved.");
     resetProjectEditor(); setSearchProjects(""); setStatusFilter("all");
   }
 
@@ -2136,14 +2548,14 @@ function ProjectsPanel({ today, userId }: { today: string; userId: string }) {
     });
     if (!saved) return;
     if (editingProjectId === id) resetProjectEditor();
-    setEditingMilestoneId(null); setMessage("Project deleted from cloud.");
+    setEditingMilestoneId(null); setMessage("Project deleted.");
   }
 
   async function changeStatus(id: string, status: ProjectStatus) {
     const project = projects.find(item => item.id === id);
     if (!project) return;
     const saved = await updateProject({ ...project, status, updatedAt: new Date().toISOString() });
-    if (saved) setMessage("Project status updated in cloud.");
+    if (saved) setMessage("Project status updated.");
   }
 
   async function addMilestone(event: FormEvent<HTMLFormElement>, projectId: string) {
@@ -2156,7 +2568,7 @@ function ProjectsPanel({ today, userId }: { today: string; userId: string }) {
     const saved = await updateProject({ ...project, updatedAt: now, milestones: [...project.milestones, milestone] });
     if (!saved) return;
     setMilestoneDrafts(items => ({ ...items, [projectId]: "" }));
-    setMessage("Milestone saved in cloud.");
+    setMessage("Milestone saved.");
   }
 
   async function toggleMilestone(projectId: string, milestoneId: string) {
@@ -2175,7 +2587,7 @@ function ProjectsPanel({ today, userId }: { today: string; userId: string }) {
       milestones: project.milestones.map(m => m.id === editingMilestoneId ? { ...m, title } : m) });
     if (!saved) return;
     setEditingMilestoneId(null); setMilestoneTitle("");
-    setMessage("Milestone updated in cloud.");
+    setMessage("Milestone updated.");
   }
 
   async function deleteMilestone(projectId: string, milestoneId: string) {
@@ -2275,7 +2687,7 @@ function ProjectsPanel({ today, userId }: { today: string; userId: string }) {
                         <span className="sr-only">Status of {project.title}</span>
                         <select aria-label={`Status of ${project.title}`} value={project.status}
                           onChange={(event) => changeStatus(project.id, event.target.value as ProjectStatus)}
-                          className="rounded-lg border border-white/15 bg-[#0c0c0c] px-2 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-400">
+                          className="rounded-lg border border-white/15 bg-[var(--dt-field)] px-2 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-400">
                           {PROJECT_STATUSES.map((status) => <option key={status} value={status}>{projectStatusLabel(status)}</option>)}
                         </select>
                       </label>
@@ -2292,7 +2704,7 @@ function ProjectsPanel({ today, userId }: { today: string; userId: string }) {
                     </div>
                     <div className="mt-4 space-y-2">
                       {project.milestones.map((milestone) => (
-                        <div key={milestone.id} className="flex min-w-0 items-start gap-2 rounded-lg border border-white/10 bg-[#202020] px-3 py-2">
+                        <div key={milestone.id} className="flex min-w-0 items-start gap-2 rounded-lg border border-white/10 bg-[var(--dt-raised)] px-3 py-2">
                           <button type="button" aria-label={`${milestone.done ? "Mark incomplete" : "Complete"} ${milestone.title}`}
                             aria-pressed={milestone.done}
                             onClick={() => toggleMilestone(project.id, milestone.id)}
@@ -2376,7 +2788,7 @@ function ProjectsPanel({ today, userId }: { today: string; userId: string }) {
                 className="rounded-xl border border-white/20 px-4 text-sm text-neutral-200 hover:bg-white/10">Cancel edit</button>}
             </div>
             <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">
-              {message || "Projects and milestones are saved in Supabase."}
+              {message || ""}
             </p>
           </form>
         </section>
@@ -2427,7 +2839,7 @@ function FinancePanel({ today, userId }: { today: string; userId: string }) {
     busyRef.current = true;
     setBusy(true);
     try { await action(); return true; }
-    catch (error) { setFinanceMessage(`Cloud save failed: ${cloudError(error)}`); return false; }
+    catch (error) { setFinanceMessage(`Save failed: ${cloudError(error)}`); return false; }
     finally { busyRef.current = false; setBusy(false); }
   }
 
@@ -2500,7 +2912,7 @@ function FinancePanel({ today, userId }: { today: string; userId: string }) {
       }
     });
     if (!saved) return;
-    setFinanceMessage(current ? "Transaction updated in cloud." : "Transaction saved in cloud.");
+    setFinanceMessage(current ? "Transaction updated." : "Transaction saved.");
     setSelectedMonth(date.slice(0, 7));
     setMonthlyBudget(0); setSearchTransactions(""); setTypeFilter("all");
     resetEditor();
@@ -2524,7 +2936,7 @@ function FinancePanel({ today, userId }: { today: string; userId: string }) {
     });
     if (!saved) return;
     if (editingTransactionId === item.id) resetEditor();
-    setFinanceMessage("Transaction deleted from cloud.");
+    setFinanceMessage("Transaction deleted.");
   }
 
   async function saveBudget(event: FormEvent<HTMLFormElement>) {
@@ -2540,7 +2952,7 @@ function FinancePanel({ today, userId }: { today: string; userId: string }) {
       if (error) throw error;
       setBudgets(items => ({ ...items, [activeMonth]: amount }));
     });
-    if (saved) { setMonthlyBudget(0); setFinanceMessage("Budget saved in cloud."); }
+    if (saved) { setMonthlyBudget(0); setFinanceMessage("Budget saved."); }
   }
 
   function exportTransactions() {
@@ -2710,7 +3122,7 @@ function FinancePanel({ today, userId }: { today: string; userId: string }) {
                 {editingTransactionId && <button type="button" onClick={() => { resetEditor(); setFinanceMessage(""); }}
                   className="rounded-xl border border-white/20 px-4 text-sm hover:bg-white/10">Cancel edit</button>}
               </div>
-              <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">{financeMessage || "Finance records are saved in Supabase."}</p>
+              <p role="status" aria-live="polite" className="min-h-5 text-xs text-neutral-400">{financeMessage || ""}</p>
             </form>
           </section>
           <section className={`${cardClass} p-5 sm:p-6`} aria-label="Monthly expense budget">
@@ -2731,7 +3143,7 @@ function FinancePanel({ today, userId }: { today: string; userId: string }) {
             </div>
             <p className="mt-2 text-xs text-neutral-400">
               {activeBudget ? budgetPercent > 100 ? `${formatINR(monthlyExpenses - activeBudget)} over budget` : `${formatINR(activeBudget - monthlyExpenses)} remaining` :
-                "Enter a limit and save it to start tracking your spending."}
+                "Set your budget."}
             </p>
           </section>
         </div>
@@ -2758,11 +3170,40 @@ function formatCreatedAt(value: string) {
   return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(parsed);
 }
 
+function MobileMetric({ title, value, detail, icon: Icon, onClick }: {
+  title: string; value: string; detail: string; icon: LucideIcon; onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick}
+      className="dt-dashboard-card dt-metric-press dt-glass-card group relative flex min-h-[151px] min-w-0 flex-col items-start overflow-hidden rounded-[23px] p-4 text-left active:scale-[.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] sm:min-h-[160px] sm:p-5">
+      <span className="pointer-events-none absolute -right-7 -top-9 h-24 w-24 rounded-full bg-[var(--accent)]/[0.035] blur-2xl"/>
+      <div className="relative flex w-full items-center justify-between gap-2"><span className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]"><Icon size={18}/></span><ArrowRight size={14} className="text-neutral-600 transition group-hover:text-[var(--accent)]"/></div>
+      <span className="relative mt-3 text-[30px] font-black leading-none tracking-[-.06em] text-white sm:text-4xl">{value}</span>
+      <span className="relative mt-1.5 text-xs font-semibold text-neutral-200">{title}</span>
+      <span className="relative mt-2 h-[3px] w-16 rounded-full bg-white/10"><span className="dt-micro-progress block h-full w-[63%] rounded-full"/></span>
+      <span className="relative mt-2 text-[10px] text-neutral-500">{detail}</span>
+    </button>
+  );
+}
+
+function SettingToggle({ icon: Icon, label, description, checked, onChange }: {
+  icon: LucideIcon; label: string; description: string; checked: boolean; onChange: (next: boolean) => void;
+}) {
+  return <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-4">
+    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/[0.065]"><Icon size={19}/></span>
+    <div className="min-w-0 flex-1"><p className="text-sm font-semibold">{label}</p><p className="mt-1 text-xs leading-5 text-neutral-500">{description}</p></div>
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={()=>onChange(!checked)}
+      className={`relative h-8 w-[52px] shrink-0 rounded-full transition ${checked?"bg-white":"bg-white/20"}`}>
+      <span className={`absolute top-1 h-6 w-6 rounded-full shadow-md transition-all ${checked?"left-[24px] bg-black":"left-1 bg-neutral-300"}`}/>
+    </button>
+  </div>;
+}
+
 function StatCard({ title, value, description, icon: Icon }: {
   title: string; value: string; description: string; icon: LucideIcon;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#171717] p-4 transition hover:border-white/25 sm:p-5">
+    <div className="dt-interact rounded-[24px] border border-white/10 bg-[var(--dt-surface)] p-4 hover:border-[var(--accent)]/35 sm:p-5">
       <div className="mb-5 flex items-center justify-between">
         <p className="text-xs font-medium text-neutral-400">{title}</p>
         <div className="rounded-lg bg-white/10 p-2 text-neutral-100"><Icon size={17} /></div>
